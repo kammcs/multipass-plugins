@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multipass.theater/schema/plugin-manifest-1.json",
+  "title": "Multipass plugin manifest",
+  "description": "manifest.json at the root of a .mpp package. This is the document that gets signed, and it names every other file with its hash. Point your editor at this schema for validation and completion as you type. The server's own validator is the authority; a Go contract test keeps the two in step.",
+  "type": "object",
+  "required": ["id", "name", "version", "apiVersion", "entry"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Reverse-DNS, permanent: it is the identity everything else hangs off.",
+      "pattern": "^[a-z0-9][a-z0-9.-]*[a-z0-9]$",
+      "minLength": 3,
+      "maxLength": 128,
+      "examples": ["com.example.myplugin"]
+    },
+    "name": {
+      "type": "string",
+      "description": "What an owner sees.",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "version": {
+      "type": "string",
+      "description": "Your version string. The registry refuses a duplicate.",
+      "minLength": 1,
+      "maxLength": 32
+    },
+    "apiVersion": {
+      "type": "integer",
+      "description": "The plugin API you were built against. A server refuses a package whose apiVersion it does not speak, so an old plugin never half-works.",
+      "enum": [1]
+    },
+    "entry": {
+      "type": "string",
+      "description": "The .wasm file inside the package.",
+      "pattern": "^[A-Za-z0-9._-]+\\.wasm$"
+    },
+    "description": {
+      "type": "string",
+      "description": "One or two sentences, shown in the registry and in the owner's plugin list.",
+      "maxLength": 500
+    },
+    "author": { "type": "string", "maxLength": 120 },
+    "homepage": {
+      "type": "string",
+      "description": "Where to read more.",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "provides": {
+      "type": "array",
+      "description": "The families you implement.",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["matching", "fields", "search", "events", "subtitles", "segments", "theme", "pages", "source"]
+      }
+    },
+    "events": {
+      "type": "array",
+      "description": "The events you ask to be told about. Declared rather than requested at runtime, so the install screen can say in plain words what you will learn. Requires the events family, and an events plugin must name at least one.",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["playback.started", "playback.paused", "playback.resumed", "playback.stopped", "playback.finished"]
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "The powers you ask the owner to grant. Absent means none at all, which the install screen says out loud. A CLOSED set: an unknown key fails the parse, because a grant the host cannot enforce is one the owner would be shown and we would not apply.",
+      "additionalProperties": false,
+      "properties": {
+        "http": {
+          "type": "array",
+          "description": "Outbound HTTPS hosts. One leading '*.' wildcard label is allowed. Ports and schemes are not part of a grant: the host function only ever speaks https on the default port, and private, loopback and link-local addresses are refused after DNS with every redirect re-checked.",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$" }
+        },
+        "storage": {
+          "type": "boolean",
+          "description": "A key-value bucket isolated by plugin id. Removing the plugin removes the bucket."
+        }
+      }
+    },
+    "settings": {
+      "type": "array",
+      "description": "Owner-editable settings, rendered as rows in your plugin's card. For an events plugin these are the SERVER-wide values (an application's credentials, say); each person's own account is connected separately and never appears here.",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "required": ["key", "label", "type"],
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "type": {
+            "type": "string",
+            "description": "A password setting is write-only to the API: an owner can replace it, never read it back out of the server they are configuring.",
+            "enum": ["text", "password", "number", "toggle", "select"]
+          },
+          "default": { "type": "string" },
+          "options": {
+            "type": "array",
+            "description": "Required when type is select.",
+            "items": { "type": "string" }
+          },
+          "help": { "type": "string", "maxLength": 500 }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "description": "Your declared budgets. Zero or absent means the default, never unlimited: there is no way to express unlimited.",
+      "additionalProperties": false,
+      "properties": {
+        "memoryPages": {
+          "type": "integer",
+          "description": "64 KiB pages of linear memory. Default 256 (16 MiB).",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "description": "How long one call may run. Default 5000. A call past its deadline is killed by closing the module; the next call rebuilds it, so a timeout costs latency, not a dead plugin.",
+          "minimum": 1,
+          "maximum": 30000
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "description": "Every packaged file with its sha256. You do not write this: 'multipass plugins pack' hashes everything and fills it in.",
+      "items": {
+        "type": "object",
+        "required": ["name", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    }
+  }
+}

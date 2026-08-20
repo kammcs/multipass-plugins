@@ -1,0 +1,26 @@
+{
+  "id": "theater.multipass.matchdemo",
+  "name": "Demo Matcher",
+  "version": "1.1.0",
+  "apiVersion": 1,
+  "description": "A matching service that invents plausible metadata for anything. For trying out plugin matching without an internet connection.",
+  "author": "Multipass",
+  "entry": "plugin.wasm",
+  "provides": [
+    "matching",
+    "fields"
+  ],
+  "settings": [
+    {
+      "key": "note",
+      "label": "Note to add",
+      "type": "text",
+      "default": "Matched by the demo plugin.",
+      "help": "Appears in the description of everything this service matches."
+    }
+  ],
+  "limits": {
+    "memoryPages": 64,
+    "timeoutMs": 3000
+  }
+}

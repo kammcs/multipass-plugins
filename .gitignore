@@ -1,0 +1,4 @@
+# Built artifacts. Every example builds from source in one command, and a
+# 3 MB wasm blob per example is not what a reader came here for.
+plugin.wasm
+*.mpp

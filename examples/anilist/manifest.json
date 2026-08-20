@@ -1,0 +1,43 @@
+{
+  "id": "theater.multipass.anilist",
+  "name": "AniList",
+  "version": "1.1.0",
+  "apiVersion": 1,
+  "description": "Matches anime against AniList, which knows series and films that general movie databases handle poorly. Fills in episode titles too.",
+  "author": "Multipass",
+  "homepage": "https://anilist.co",
+  "entry": "plugin.wasm",
+  "provides": [
+    "matching"
+  ],
+  "capabilities": {
+    "http": [
+      "graphql.anilist.co"
+    ],
+    "storage": true
+  },
+  "settings": [
+    {
+      "key": "titleLanguage",
+      "label": "Title language",
+      "type": "select",
+      "options": [
+        "romaji",
+        "english",
+        "native"
+      ],
+      "default": "romaji",
+      "help": "Which of AniList's titles to use for matched items."
+    },
+    {
+      "key": "adult",
+      "label": "Include adult titles in matches",
+      "type": "toggle",
+      "default": "off"
+    }
+  ],
+  "limits": {
+    "memoryPages": 128,
+    "timeoutMs": 15000
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "theater.multipass.eventdemo",
+  "name": "Event Demo",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "A reference event consumer with no network at all: it links, records what it is told, and can read its own log back. Used by the test harness.",
+  "author": "Multipass",
+  "entry": "plugin.wasm",
+  "provides": [
+    "events"
+  ],
+  "events": [
+    "playback.started",
+    "playback.paused",
+    "playback.resumed",
+    "playback.stopped",
+    "playback.finished"
+  ],
+  "capabilities": {
+    "storage": true
+  },
+  "settings": [
+    {
+      "key": "code",
+      "label": "Pretend sign-in code",
+      "type": "text",
+      "default": "DEMO-1234",
+      "help": "What link.begin hands back, so a test can predict it."
+    }
+  ],
+  "limits": {
+    "memoryPages": 64,
+    "timeoutMs": 5000
+  }
+}

@@ -1,0 +1,34 @@
+# Answers pull requests, because this repository is a mirror and a commit
+# here would be overwritten by the next publish.
+#
+# Merging somebody's PR would quietly throw their work away a week later,
+# so the honest thing is to say no immediately, say why, and point at the
+# route that does work. Silence would be worse than either.
+name: pull requests
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  explain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain and close
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          gh pr comment "$PR" --repo "$REPO" --body "Thanks @$AUTHOR, and sorry for the automated reply.
+
+          This repository is a **mirror**. These examples live inside the Multipass server tree, where the test suite builds and runs every one of them on every change, and they are republished here on each release. A commit merged here would be overwritten by the next publish, so merging this would quietly throw your work away a week later.
+
+          **Please open an issue with the same change instead.** A patch in an issue gets applied upstream and the commit credits you. That is not a consolation prize: it is the route that actually keeps your change.
+
+          An example in another language (TinyGo, Rust, C, Zig) is especially wanted, and [CONTRIBUTING.md](CONTRIBUTING.md) has the detail."
+          gh pr close "$PR" --repo "$REPO"

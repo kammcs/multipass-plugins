@@ -1,0 +1,43 @@
+{
+  "id": "theater.multipass.trakt",
+  "name": "Trakt",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Keeps your Trakt watch history in step with what you actually watch here. Each person connects their own Trakt account, and nobody else's viewing is ever sent.",
+  "author": "Multipass",
+  "homepage": "https://trakt.tv",
+  "entry": "plugin.wasm",
+  "provides": [
+    "events"
+  ],
+  "events": [
+    "playback.started",
+    "playback.paused",
+    "playback.resumed",
+    "playback.stopped",
+    "playback.finished"
+  ],
+  "capabilities": {
+    "http": [
+      "api.trakt.tv"
+    ]
+  },
+  "settings": [
+    {
+      "key": "clientId",
+      "label": "Trakt client ID",
+      "type": "text",
+      "help": "Create an application at trakt.tv/oauth/applications. Use 'urn:ietf:wg:oauth:2.0:oob' as the redirect URI."
+    },
+    {
+      "key": "clientSecret",
+      "label": "Trakt client secret",
+      "type": "password",
+      "help": "From the same application page. Stored on this server and never shown again."
+    }
+  ],
+  "limits": {
+    "memoryPages": 128,
+    "timeoutMs": 20000
+  }
+}

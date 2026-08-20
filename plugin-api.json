@@ -1,0 +1,458 @@
+{
+  "apiVersion": 1,
+  "summary": "The contract between a Multipass server and a plugin: what a plugin can declare, what the host will call, what it may ask permission to do, and what it can put on a screen.",
+  "stability": "Frozen-additive within an apiVersion. New families, ops, block types and manifest fields may appear; existing ones will not change meaning or disappear. A breaking change would ship as apiVersion 2, and a server refuses a package whose apiVersion it does not speak, so an old plugin never half-works.",
+  "abi": {
+    "target": "WebAssembly. Any language that compiles to wasm works; Go's own `GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared` needs no toolchain beyond Go.",
+    "exports": [
+      {
+        "name": "mp_alloc(size i32) -> i32",
+        "description": "Reserve `size` bytes inside the plugin's memory and return the offset. The host writes each call's input there."
+      },
+      {
+        "name": "mp_handle(ptr i32, len i32) -> i64",
+        "description": "Handle one call. The input is JSON at `ptr`. Return a packed `(ptr << 32) | len` pointing at the JSON reply, still inside your own memory."
+      }
+    ],
+    "envelope": {
+      "request": {
+        "op": "op",
+        "payload": "data"
+      },
+      "reply": {
+        "payload": "data",
+        "error": "error"
+      },
+      "description": "Every call in is a JSON object with the op name under `op` and its arguments under `data`. Every reply out is `{\"data\": ...}` or `{\"error\": \"a sentence\"}`. An `error` reply is the plugin WORKING: it is logged and shown, and it never counts toward the fault budget that auto-disables a broken plugin."
+    }
+  },
+  "hostFunctions": [
+    {
+      "name": "log(level, ptr, len)",
+      "capability": null,
+      "description": "Write a line to the server log, prefixed with your plugin id. Costs nothing and grants nothing, so it is always available."
+    },
+    {
+      "name": "config() -> i64",
+      "capability": null,
+      "description": "Your own settings, as the owner filled them in, as a JSON object. Never another plugin's."
+    },
+    {
+      "name": "http(ptr, len) -> i64",
+      "capability": "http",
+      "description": "One outbound HTTPS request, as JSON in and JSON out. Only hosts your manifest lists, only https, only the default port."
+    },
+    {
+      "name": "storage(ptr, len) -> i64",
+      "capability": "storage",
+      "description": "get / set / delete in a key-value bucket that belongs to your plugin alone. This is how a plugin caches an API response between calls."
+    }
+  ],
+  "grantsAreImports": "A capability is not a permission check, it is whether the function exists. Ungranted host functions are never added to your module, so calling one fails at load with a link error rather than at runtime with a refusal. There is no permission-check path for the host to forget.",
+  "capabilities": [
+    {
+      "key": "http",
+      "type": "array of hostnames",
+      "shownToOwnerAs": "Can contact example.com",
+      "description": "Outbound HTTPS to the hosts you name. One leading `*.` wildcard label is allowed. Ports and schemes are not part of the grant: the host function only ever speaks https on the default port.",
+      "notes": "Private, loopback and link-local addresses are refused AFTER DNS resolution, and every redirect hop is re-checked. An approved hostname is not a route into the owner's home network."
+    },
+    {
+      "key": "storage",
+      "type": "boolean",
+      "shownToOwnerAs": "Can save its own settings and cached data",
+      "description": "A key-value bucket isolated by plugin id. Removing the plugin removes the bucket."
+    }
+  ],
+  "noCapabilityNeeded": "Implementing a family is declared through `provides`, not through a capability. Capabilities are ambient powers an owner weighs; implementing a host contract is not one, and a grant that grants nothing is noise on the install screen. A plugin that only transforms what it is handed asks for nothing at all, and the hub says so.",
+  "families": [
+    {
+      "id": "matching",
+      "title": "Matching services",
+      "status": "available",
+      "description": "Be a library's metadata source. The owner picks your plugin per library, and from then on the scanner, the fix-match dialog, artwork picking and every background refresh ask you instead of the built-in provider.",
+      "notes": "Your plugin id is stamped as provenance on everything it matches, so later refreshes come back to you. A library never silently falls back to the built-in provider: that is the whole point of naming a service.",
+      "ops": [
+        {
+          "op": "match.movie",
+          "input": "{ title, year }",
+          "output": "a meta object, or null",
+          "description": "Find a film by title. `year` may be 0."
+        },
+        {
+          "op": "match.series",
+          "input": "{ name, year }",
+          "output": "a meta object, or null",
+          "description": "Find a series by name."
+        },
+        {
+          "op": "match.episode",
+          "input": "{ seriesId, season, episode }",
+          "output": "a meta object, or null",
+          "description": "One episode of an already-matched series. Season and episode numbers are the HOST's, so a service that models seasons differently has to map them.",
+          "notes": "The host asks one episode at a time. Fetch the season once and cache it through the storage grant, or you will make one request per episode."
+        },
+        {
+          "op": "match.movieById",
+          "input": "{ id }",
+          "output": "a meta object, or null",
+          "description": "Re-read a film you matched before, by your own id. Identity is sticky: once something is matched it is refetched by id and never re-searched."
+        },
+        {
+          "op": "match.seriesById",
+          "input": "{ id }",
+          "output": "a meta object, or null",
+          "description": "Re-read a series by your own id."
+        },
+        {
+          "op": "match.search",
+          "input": "{ kind, query, year }",
+          "output": "an array of { id, title, year, overview, poster }",
+          "description": "Candidates for the owner to choose from in the fix-match dialog. `kind` is `movie` or `series`."
+        },
+        {
+          "op": "match.images",
+          "input": "{ kind, id }",
+          "output": "{ posters: [], backdrops: [] }, or null",
+          "description": "Alternative artwork for the owner to pick from. URLs are fetched and re-hosted by the server, never by the viewer's device."
+        },
+        {
+          "op": "match.person",
+          "input": "{ id }",
+          "output": "a person object, or null",
+          "description": "A cast or crew member's detail page: biography, photo, known-for credits."
+        }
+      ],
+      "conventions": [
+        "`null` means no match and an error means a failure, and the host treats them completely differently: a no-match is recorded and stops being asked, a failure is retried later. Returning an error for \"not found\" makes a title retry forever.",
+        "Genre names are enough; the host derives the rest.",
+        "The host cross-checks runtime against the file and rejects a searched match that disagrees by roughly half. Do not invent a runtime you do not have.",
+        "Free data is dirty. Sanity-check what you get: a season that declares 12 episodes and hands back 25 titles is a data bug you should refuse, not pass on."
+      ]
+    },
+    {
+      "id": "fields",
+      "title": "Fields and detail sections",
+      "status": "available",
+      "description": "Put your own information on a detail page, on all seven surfaces. Return plain fields and they become a fact list for free; return blocks when you want more control.",
+      "notes": "The result is computed when an item is enriched and then STORED, so a detail page never calls plugin code. A slow plugin can make a section stale; it can never make a page slow.",
+      "ops": [
+        {
+          "op": "describe.item",
+          "input": "{ kind, title, year, series, season, episode, overview, metaId, metaProvider, runtimeMin, genres, locale }",
+          "output": "{ fields: [{label, value}], blocks: [...] }",
+          "description": "What you have to say about one item. Return either or both, or nothing at all.",
+          "notes": "This needs NO capability. The host passes the item in and you return your contribution, so a plugin never reads the library and never writes to it."
+        }
+      ],
+      "conventions": [
+        "The host re-asks when a setting changes, because what you say can depend on it.",
+        "Installing your plugin backfills an existing library in the background, so an owner does not have to re-scan.",
+        "A string of the form `@:some.key` is resolved server-side against your package's own `strings/<locale>.json`, so your text can be translated without clients knowing your catalog exists."
+      ]
+    },
+    {
+      "id": "search",
+      "title": "Search hooks",
+      "status": "planned",
+      "description": "Contribute an attributed section to search results. A slow plugin is dropped from that query rather than allowed to hold up results."
+    },
+    {
+      "id": "events",
+      "title": "Event consumers",
+      "status": "available",
+      "description": "Be told what someone watched, as it happens. A scrobbler is the shape this exists for: start, pause, resume and stop, with a progress percentage, so a service can keep a watch history in step rather than guessing from a single write at the end.",
+      "notes": "This is the only family that carries information about a PERSON, so it is built the other way up from the rest: nothing is delivered until a profile links itself to your plugin. The owner installs and enables it; each person opts in by connecting their own account, and a profile that never links is never mentioned to you. There is deliberately no owner-side setting that could start it for somebody else.",
+      "ops": [
+        {
+          "op": "link.begin",
+          "input": "{ profile }",
+          "output": "{ instructions, url, code, expiresIn, interval, state }",
+          "description": "Start connecting one person's account. Return somewhere to go and a short code to type: the device-code flow, which is what every service with a TV client already speaks.",
+          "notes": "`state` is yours and opaque to the host: whatever you need to finish the flow. The host stores it, never reads it, and never returns it through the API. The url must be https."
+        },
+        {
+          "op": "link.poll",
+          "input": "{ profile, state }",
+          "output": "{ pending } or { linked, account, state }",
+          "description": "Has the person finished on the other device? Answer `pending` until they have, then `linked` with the account name to show them and the state to keep.",
+          "notes": "Answer pending rather than failing when the far end says you are polling too fast. The host is already waiting on your declared interval."
+        },
+        {
+          "op": "link.revoke",
+          "input": "{ profile, state }",
+          "output": "{ }",
+          "description": "The person disconnected. Tell the far end if it wants to know.",
+          "notes": "The host forgets the link whatever you answer. A disconnect that depended on a third party succeeding would not be a disconnect."
+        },
+        {
+          "op": "event.deliver",
+          "input": "{ event, at, profile, item, session, state }",
+          "output": "{ state?, unlink?, note? }",
+          "description": "Something happened. `session` carries position, duration and a progress percentage the host computes so every plugin agrees on it.",
+          "notes": "Return `state` to replace what the host holds for this profile, which is how you persist a refreshed token. Return `unlink: true` when the far end has revoked the account, so a dead credential stops being retried instead of failing forever. Return `note` to say something in the server log without failing."
+        }
+      ],
+      "conventions": [
+        "You are only ever called for a profile that connected itself, so there is no case where you must check whether you are allowed to act.",
+        "Nothing about playback waits on you. A slow or unreachable service is logged and moves on, so do not design around being retried.",
+        "Ordinary position updates are not events. You are told about edges (started, paused, resumed, stopped, finished), because a consumer that wanted a progress firehose could not use one anyway.",
+        "A stop and a finish are different. A stop is wherever they left it; a finish means the server counted it as watched, which is the one you can trust for a completed history entry.",
+        "A session that goes quiet is closed for you after a few minutes, so a client that was killed or lost power still produces a stop rather than an open scrobble forever."
+      ],
+      "events": [
+        {
+          "event": "playback.started",
+          "description": "Someone started a title, or switched to a different one."
+        },
+        {
+          "event": "playback.paused",
+          "description": "They paused."
+        },
+        {
+          "event": "playback.resumed",
+          "description": "They pressed play again."
+        },
+        {
+          "event": "playback.stopped",
+          "description": "They stopped, or their client went quiet long enough to be treated as stopped."
+        },
+        {
+          "event": "playback.finished",
+          "description": "The server counted the title as watched. This is the one that means a completed viewing."
+        }
+      ]
+    },
+    {
+      "id": "subtitles",
+      "title": "Subtitle providers",
+      "status": "planned",
+      "description": "Offer subtitles for an item and deliver the chosen track."
+    },
+    {
+      "id": "segments",
+      "title": "Skip-segment providers",
+      "status": "planned",
+      "description": "Supply intro, recap and credits markers. The owner orders providers when more than one has an opinion."
+    },
+    {
+      "id": "theme",
+      "title": "Theme packs",
+      "status": "planned",
+      "description": "Ship a look. Data only, with no wasm at all."
+    },
+    {
+      "id": "pages",
+      "title": "Plugin pages",
+      "status": "planned",
+      "description": "Declare whole pages built from the same blocks, plus container blocks whose ids the server resolves into ordinary item cards, so your page renders library-native cells."
+    },
+    {
+      "id": "source",
+      "title": "Library types",
+      "status": "planned",
+      "description": "Be a source of items that are not files on disk: a scanner that produces virtual items and a resolver that turns one into a playable URL at play time."
+    }
+  ],
+  "blocks": {
+    "description": "Everything a plugin can draw. It is a closed vocabulary of DATA, never code: plugin code never runs on a client, which is what lets one plugin render natively on a TV, a phone and the web at once.",
+    "skew": "Two version gaps are handled separately. The SERVER drops block types it does not know, so a plugin built for a newer host cannot smuggle one through. CLIENTS skip types THEY do not know and render your `fallbackText` instead, so set it on anything exotic and a newer server degrades gracefully on an older app.",
+    "types": [
+      {
+        "type": "heading",
+        "carries": "text",
+        "description": "A small heading inside your section."
+      },
+      {
+        "type": "text",
+        "carries": "text",
+        "description": "A paragraph. Supports bold, italic and line breaks, and nothing else."
+      },
+      {
+        "type": "factList",
+        "carries": "rows[] of {label, value}",
+        "description": "Key/value rows. This is what plain fields become."
+      },
+      {
+        "type": "badges",
+        "carries": "items[] of strings",
+        "description": "Short chips, for tags and states."
+      },
+      {
+        "type": "images",
+        "carries": "images[] of {url, caption}",
+        "description": "A row of pictures. Each url is fetched and re-hosted by the server, so a viewer's device never connects to a host you chose and the picture survives that host going away."
+      },
+      {
+        "type": "links",
+        "carries": "links[] of {label, action}",
+        "description": "Buttons that do one of the host's verbs."
+      }
+    ],
+    "actions": [
+      {
+        "kind": "url",
+        "carries": "url",
+        "description": "Open a web address. https only. Not drawn on platforms with no browser, because a button that visibly does nothing is worse than one never offered."
+      },
+      {
+        "kind": "item",
+        "carries": "itemId",
+        "description": "Open another item in the library."
+      },
+      {
+        "kind": "person",
+        "carries": "personId",
+        "description": "Open a cast or crew member's page."
+      }
+    ],
+    "bounds": {
+      "description": "Enforced server-side, so a plugin cannot make a page enormous and a client can size its renderer knowing the ceiling. A half-built block (a fact row with no value, a links block with no valid action) is dropped rather than rendered broken.",
+      "maxBlocks": 12,
+      "maxRows": 24,
+      "maxItemsInList": 24,
+      "maxTextRunes": 2000,
+      "maxLabelRunes": 120
+    },
+    "attribution": "Every section names the plugin that wrote it, on every surface. Someone seeing unfamiliar text on their own library must always be able to tell where it came from."
+  },
+  "manifest": {
+    "description": "manifest.json sits at the root of your package and is the signed document. It names every other file with its hash, so a signed manifest fully determines the package: an unlisted extra, a missing file, a size mismatch or a hash mismatch all refuse the package.",
+    "fields": [
+      {
+        "key": "id",
+        "required": true,
+        "description": "Reverse-DNS, e.g. `com.example.myplugin`. Permanent: it is the identity everything else hangs off."
+      },
+      {
+        "key": "name",
+        "required": true,
+        "description": "What an owner sees."
+      },
+      {
+        "key": "version",
+        "required": true,
+        "description": "Your version string. The registry refuses a duplicate."
+      },
+      {
+        "key": "apiVersion",
+        "required": true,
+        "description": "The plugin API you were built against. A server refuses a package whose apiVersion it does not speak."
+      },
+      {
+        "key": "entry",
+        "required": true,
+        "description": "The .wasm file inside the package."
+      },
+      {
+        "key": "description",
+        "required": false,
+        "description": "One or two sentences, shown in the registry and the hub."
+      },
+      {
+        "key": "author",
+        "required": false,
+        "description": "Who to credit."
+      },
+      {
+        "key": "homepage",
+        "required": false,
+        "description": "Where to read more."
+      },
+      {
+        "key": "provides",
+        "required": false,
+        "description": "The families you implement, e.g. `[\"matching\"]`."
+      },
+      {
+        "key": "capabilities",
+        "required": false,
+        "description": "`{ \"http\": [\"api.example.com\"], \"storage\": true }`. Absent means no powers at all. This is a CLOSED set: an unknown key fails the parse, because a grant the host cannot enforce is one the owner would be shown and we would not apply."
+      },
+      {
+        "key": "events",
+        "required": false,
+        "description": "The events you ask to be told about, e.g. [\"playback.started\", \"playback.stopped\"]. Declared rather than requested at runtime so the install screen can say in plain words what you will learn. An events plugin must name at least one, and naming any requires declaring the events family."
+      },
+      {
+        "key": "settings",
+        "required": false,
+        "description": "Owner-editable settings, rendered as rows in your hub card."
+      },
+      {
+        "key": "limits",
+        "required": false,
+        "description": "`{ \"memoryPages\": 256, \"timeoutMs\": 5000 }`. Zero or absent means the default, never unlimited: there is no way to express unlimited."
+      },
+      {
+        "key": "files",
+        "required": true,
+        "description": "Every packaged file with its sha256. `multipass plugins pack` writes this for you."
+      }
+    ],
+    "settingTypes": [
+      "text",
+      "password",
+      "number",
+      "toggle",
+      "select"
+    ],
+    "settingNote": "A `password` setting is write-only to the API: an owner can replace it, never read it back out of the server they are configuring.",
+    "linking": "A plugin in the events family is connected per person, not per server. The owner's settings and the person's credentials are separate: settings are server-wide and owner-edited (a Trakt application, say), while the account each person connects is held as opaque state the host passes to you and stores back."
+  },
+  "limits": {
+    "description": "What bounds a plugin at runtime. Each has a default you get by saying nothing, and a ceiling you cannot exceed.",
+    "memoryPages": {
+      "default": 256,
+      "unit": "64 KiB pages",
+      "note": "256 pages is 16 MiB, which is room for a JS plugin with an interpreter shell."
+    },
+    "timeoutMs": {
+      "default": 5000,
+      "max": 30000,
+      "note": "A call that runs past its deadline is killed by closing the module, because the runtime has no instruction metering. The next call rebuilds it, so a timeout costs latency, not a dead plugin."
+    },
+    "concurrency": "One call at a time per plugin.",
+    "faults": "Five consecutive faults auto-disable a plugin, and the hub says why. A returned `error` is not a fault: that is the plugin working."
+  },
+  "package": {
+    "extension": ".mpp",
+    "format": "A zip holding manifest.json, manifest.sig, and every file the manifest names.",
+    "verification": "Verification happens entirely in memory. A package that fails leaves nothing on disk.",
+    "signing": "Registry packages are signed with the Multipass registry key, which lives on one machine and never on the server or the node. Signing happens on acceptance, so you do not need a key to submit."
+  },
+  "registry": {
+    "description": "The catalog servers browse and install from. Free to list, free to host.",
+    "trust": "The node that serves the catalog is dumb storage: it stores and serves and never signs. Every server verifies the catalog against keys compiled into its own binary, so whoever controls the host can serve a stale catalog or none at all, and nothing worse.",
+    "consent": "An owner is shown exactly what a plugin may do BEFORE anything is downloaded. A package whose manifest asks for more than the catalog advertised is refused, because that approval was not for this plugin. Asking for less is always fine.",
+    "updates": "A new version that wants a NEW power is flagged as a new decision rather than treated as consent to update.",
+    "withdrawal": "A signed kill switch can withdraw a plugin. Servers honor it on a daily check and whenever an owner opens their plugins page. A withdrawn plugin is switched off with its reason shown, cannot be re-enabled, and cannot be reinstalled. It is never deleted: the owner needs to see what happened, and a plugin's data outliving a bad release is worth more than a tidy directory."
+  },
+  "policy": {
+    "title": "What the registry will and will not list",
+    "rules": [
+      "Grants must be proportional to purpose. A plugin that asks to contact hosts it has no reason to contact is sent back.",
+      "Sources are reviewed for legitimacy. A plugin whose purpose is to make infringing material easy to obtain is refused, whatever it is called.",
+      "It has to work: the package must install, load and answer its declared ops.",
+      "Source is required at submission. A binary alone cannot be reviewed."
+    ],
+    "sideload": "Developer mode (`MULTIPASS_PLUGIN_DEV`, set on the server itself and announced at every boot) installs unsigned packages from a file. It is how you test your own work. It is neither policed nor supported, and it never accepts a BADLY signed package: that is tampering or corruption, not a development flow."
+  },
+  "excluded": {
+    "description": "Deliberately outside the plugin surface, recorded so nobody proposes them twice.",
+    "items": [
+      {
+        "what": "Authentication providers",
+        "why": "Identity belongs to the accounts service. A plugin in the credential path would reopen exactly what sign-in enforcement closed."
+      },
+      {
+        "what": "Transcoder hooks",
+        "why": "Plugin-supplied ffmpeg arguments are command injection with extra steps."
+      },
+      {
+        "what": "Client-side plugin code",
+        "why": "A TV has no browser engine to run it in, and a per-client plugin UI contract is the thing that killed the last generation of media-server plugins. Plugins ship data; the apps render it."
+      }
+    ]
+  }
+}

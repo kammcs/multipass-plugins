@@ -1,0 +1,13 @@
+{
+  "id": "theater.multipass.hello",
+  "name": "Hello",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "The reference plugin: answers ping, echoes anything else it is given.",
+  "author": "Multipass",
+  "entry": "plugin.wasm",
+  "limits": {
+    "memoryPages": 64,
+    "timeoutMs": 3000
+  }
+}
