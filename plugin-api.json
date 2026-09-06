@@ -7,11 +7,11 @@
     "exports": [
       {
         "name": "mp_alloc(size i32) -> i32",
-        "description": "Reserve `size` bytes inside the plugin's memory and return the offset. The host writes each call's input there."
+        "description": "Reserve `size` bytes inside the plugin's memory and return the offset. The host calls this MORE than you might expect: once for each call's input, and again for the reply of every host function you invoke (config, http, storage, lookup). YOU must release those buffers, or your memory only grows and a long run over a real library ends in an out-of-memory fatal that kills the instance mid-call. The examples free everything except the current input at the top of mp_handle, which is safe because the host has finished reading the previous reply by the time a new call arrives. Raising memoryPages does not fix a leak, it only postpones it."
       },
       {
         "name": "mp_handle(ptr i32, len i32) -> i64",
-        "description": "Handle one call. The input is JSON at `ptr`. Return a packed `(ptr << 32) | len` pointing at the JSON reply, still inside your own memory."
+        "description": "Handle one call. The input is JSON at `ptr`. Return a packed `(ptr << 32) | len` pointing at the JSON reply, still inside your own memory. This is also where you free what the last call held: see mp_alloc."
       }
     ],
     "envelope": {
@@ -35,7 +35,7 @@
     {
       "name": "config() -> i64",
       "capability": null,
-      "description": "Your own settings, as the owner filled them in, as a JSON object. Never another plugin's."
+      "description": "Your own settings as a JSON object, merged for whoever the current call is for: the owner's server-wide values, with that person's own overrides on top of any setting you marked `scope: profile`. Never another plugin's. Where there is nobody behind the call (a scan, a background describe) you get the server's view."
     },
     {
       "name": "http(ptr, len) -> i64",
@@ -46,6 +46,11 @@
       "name": "storage(ptr, len) -> i64",
       "capability": "storage",
       "description": "get / set / delete in a key-value bucket that belongs to your plugin alone. This is how a plugin caches an API response between calls."
+    },
+    {
+      "name": "lookup(ptr, len) -> i64",
+      "capability": "library",
+      "description": "Map external ids from one provider onto local refs ({itemId} or {seriesId}). Anything absent from the answer is simply not in this library. At most 100 ids per call."
     }
   ],
   "grantsAreImports": "A capability is not a permission check, it is whether the function exists. Ungranted host functions are never added to your module, so calling one fails at load with a link error rather than at runtime with a refusal. There is no permission-check path for the host to forget.",
@@ -62,6 +67,13 @@
       "type": "boolean",
       "shownToOwnerAs": "Can save its own settings and cached data",
       "description": "A key-value bucket isolated by plugin id. Removing the plugin removes the bucket."
+    },
+    {
+      "key": "library",
+      "type": "boolean",
+      "shownToOwnerAs": "Can check whether specific titles are in your library, and never what else is there",
+      "description": "The narrow lookup, and nothing else: you hand over external metadata ids (tmdb, imdb, tvdb, anilist, whatever your service uses) and get back local refs for the ones that exist here.",
+      "notes": "There is deliberately no search, no listing and no filter behind this. You can ask whether titles you already know about are present; you cannot find out what else is. A full library-read grant was weighed for plugin pages and refused, because no page we wanted needed it."
     }
   ],
   "noCapabilityNeeded": "Implementing a family is declared through `provides`, not through a capability. Capabilities are ambient powers an owner weighs; implementing a host contract is not one, and a grant that grants nothing is noise on the install screen. A plugin that only transforms what it is handed asks for nothing at all, and the hub says so.",
@@ -139,7 +151,7 @@
       "ops": [
         {
           "op": "describe.item",
-          "input": "{ kind, title, year, series, season, episode, overview, metaId, metaProvider, runtimeMin, genres, locale }",
+          "input": "{ id, kind, title, year, series, season, episode, overview, metaId, metaProvider, runtimeMin, genres, locale }",
           "output": "{ fields: [{label, value}], blocks: [...] }",
           "description": "What you have to say about one item. Return either or both, or nothing at all.",
           "notes": "This needs NO capability. The host passes the item in and you return your contribution, so a plugin never reads the library and never writes to it."
@@ -154,8 +166,23 @@
     {
       "id": "search",
       "title": "Search hooks",
-      "status": "planned",
-      "description": "Contribute an attributed section to search results. A slow plugin is dropped from that query rather than allowed to hold up results."
+      "status": "available",
+      "description": "Contribute an attributed section to search results, under the library's own. A slow plugin is dropped from that query rather than allowed to hold up results.",
+      "notes": "This is the ONE family that runs while somebody is waiting, because a query cannot be answered before it is typed. The host waits a quarter of a second and no longer: if you beat it your rows are merged, and if you do not, your answer is cached and shown when the search box asks again a keystroke later. You are never asked twice at once, so a slow answer costs you one query and never builds a queue. A profile with a rating cap runs no search plugins at all: your rows come from outside the library and carry no certification the host could check against the household's ceiling.",
+      "ops": [
+        {
+          "op": "search.query",
+          "input": "{ q, locale }",
+          "output": "{ layout: \"list\" | \"row\", results: [ tile ] }, or null",
+          "description": "What you have to say about what somebody is looking for. A result is a TILE, the same typed row the tiles block is built from: art, a title, a subtitle, a mark and an action. Return null when you have nothing, which is the common answer.",
+          "notes": "`q` arrives trimmed, folded to lower case and clipped, which is also how it is cached, so the same search does not cost you a second call. At most 12 rows are kept. This needs NO capability of its own; a plugin that searches a service of course needs `http` for that."
+        }
+      ],
+      "conventions": [
+        "Your section sits UNDER the library's own results, headed with your plugin's name. The heading is the attribution and you cannot change it.",
+        "A tile's `action` is the host's, from the same closed set a block link uses: open an item, open a person, open one of your own pages, open a web address.",
+        "A picture you name is fetched and re-served by the server, so a viewer's device never connects to a host you chose. A picture that cannot be fetched costs the row its art, not the row."
+      ]
     },
     {
       "id": "events",
@@ -226,26 +253,71 @@
     {
       "id": "subtitles",
       "title": "Subtitle providers",
-      "status": "planned",
-      "description": "Offer subtitles for an item and deliver the chosen track."
+      "status": "available",
+      "description": "Offer subtitles for a title and deliver the one the owner picks. Your track then sits in the subtitle list on every screen, indistinguishable from one that came with the file.",
+      "notes": "The owner searches and the owner chooses: nothing is downloaded automatically. That is deliberate, because subtitle releases are all plausibly correct and most are timed against a different cut, so picking for somebody hands them the wrong one silently. You never touch a file. You return text, the host writes it into its own data directory (never beside anyone's media) and owns it from there: removing your plugin leaves the tracks the owner chose in place, because they chose them.",
+      "ops": [
+        {
+          "op": "subtitles.search",
+          "input": "{ item, languages }",
+          "output": "{ subtitles: [{ id, lang, title, format, release, forced, hearingImpaired, rating, downloads }] }, or null",
+          "description": "Candidates for a title. `item` is the same item facts the fields family gets; `languages` are the codes the owner asked for, best first, and empty means anything you have.",
+          "notes": "`id` is yours and opaque to the host: it is handed straight back to subtitles.fetch. `release` is the release name the file was timed against, and it is the most useful thing on the row, because it is how a person tells the extended cut's subtitles from the theatrical one's. A candidate with no id or no language is dropped, since neither could be acted on. At most 30 come back."
+        },
+        {
+          "op": "subtitles.fetch",
+          "input": "{ id }",
+          "output": "{ content, format }",
+          "description": "The text of one candidate you offered. `format` is srt, vtt, ass or ssa.",
+          "notes": "`content` is the subtitle text, and it must be valid UTF-8: decode whatever your source sent before you return it, because a server that guessed would serve mojibake under your name. At most 2 MB. Anything in another format, empty, oversized or not valid text is refused and the owner is told which plugin sent it."
+        }
+      ]
     },
     {
       "id": "segments",
       "title": "Skip-segment providers",
-      "status": "planned",
-      "description": "Supply intro, recap and credits markers. The owner orders providers when more than one has an opinion."
+      "status": "available",
+      "description": "Supply the intro, recap, preview, credits and commercial markers behind the Skip button. The owner orders providers when more than one has an opinion.",
+      "notes": "You are asked ONCE per title, while the file is being analyzed, and what you return is stored. Nothing you write runs when somebody presses play, so a slow answer costs a marker and never a player. Your spans are stored under your own plugin id: you can only ever replace your own, and removing your plugin takes them with it. Where you sit in the order is fixed: below what the owner typed by hand and below the file's own chapters, above the host's lookup and its own detection. Markers a library has switched off (Settings, per library) stay stored and stop being served, which applies to yours the same way it applies to ours.",
+      "ops": [
+        {
+          "op": "segments.forItem",
+          "input": "the same item facts the fields family gets",
+          "output": "{ segments: [{ type, startMs, endMs }] }, or null",
+          "description": "What should be skippable in this title. `type` is one of intro, credits, recap, preview or commercial. Leave `endMs` out for a span that runs to the end of the file, which is what a credits marker usually is.",
+          "notes": "Return null, or an empty list, when you do not know the title: that is recorded as an answer and you are not asked about it again. A span the host cannot believe is dropped rather than repaired (an unknown type, a start past the end of the file, an end before its start, anything under a second), because a marker in the wrong place makes a viewer lose the scene. At most 20 spans per title. An empty list from a title you previously answered for WITHDRAWS your markers."
+        }
+      ]
     },
     {
       "id": "theme",
       "title": "Theme packs",
-      "status": "planned",
-      "description": "Ship a look. Data only, with no wasm at all."
+      "status": "available",
+      "description": "Ship a look. Your themes appear in everyone's theme picker beside the built-in ones, on every screen.",
+      "notes": "There are no ops, because there is nothing to ask you: a theme is a list of colours, so a pack declares them in its manifest and ships no wasm at all. Nothing runs, which makes this the one family that cannot spin, leak, call anywhere or be slow. Your theme ids are namespaced by your plugin id before anyone sees them, so they cannot collide with the built-ins or with another pack. The owner can switch any of them off, or make one the server default, exactly as they can with a theme they made themselves. Removing your plugin removes its themes; anybody using one falls back to the server default."
     },
     {
       "id": "pages",
       "title": "Plugin pages",
-      "status": "planned",
-      "description": "Declare whole pages built from the same blocks, plus container blocks whose ids the server resolves into ordinary item cards, so your page renders library-native cells."
+      "status": "available",
+      "description": "Whole pages of your own, built from the same blocks plus container blocks whose ids the server turns into ordinary item cards, so your page renders library-native cells on every surface. Reached from a link in a detail section.",
+      "notes": "A page is DECLARED in your manifest and addressed by that id, so it survives a reload, deep-links, and comes back correctly with Back. An id you did not declare is a 404 and never reaches your code.",
+      "ops": [
+        {
+          "op": "page.render",
+          "input": "{ pageId, params, locale, subject }",
+          "output": "{ title, blocks }",
+          "description": "Build one page. `params` is the small map the link carried; `subject` is that link's `id` param ALREADY RESOLVED by the host, so a page about a person arrives holding who they are and what they worked on here.",
+          "notes": "Return `title` to override the one your manifest declared, or leave it out to keep it. Blocks are bounded and sanitized exactly as a detail section is."
+        }
+      ],
+      "conventions": [
+        "Declare `subject: \"person\"` or `subject: \"item\"` on a page and the host resolves its `id` param before calling you: a person arrives with their credits in this library, an item with its cast and crew. This is why a page about what somebody directed needs no permissions at all.",
+        "For anything the host cannot know, ask narrowly: the `library` grant maps external ids from your own service onto local refs. Put those refs in an itemShelf or itemGrid and the server draws the cards.",
+        "Your page's blocks are CACHED for `cacheSeconds` (default 900, at most a day), but the cards inside a container block are resolved for every viewer on every render. Never assume the person who sees a page is the one whose request built it.",
+        "A subject that names something the viewer may not see arrives as absent, not as an error. Handle a missing subject by rendering what you can, or nothing.",
+        "Link between your own pages with the `page` action. You cannot link into another plugin's pages, and a link to a page you did not declare is dropped."
+      ]
     },
     {
       "id": "source",
@@ -287,6 +359,28 @@
         "type": "links",
         "carries": "links[] of {label, action}",
         "description": "Buttons that do one of the host's verbs."
+      },
+      {
+        "type": "itemShelf",
+        "carries": "refs[] of {itemId} or {seriesId}, optional text",
+        "description": "A scrolling row of library titles, drawn as the ordinary cards the rest of the app uses. You supply refs; the server draws the cards.",
+        "notes": "A ref names ONE thing: a film or episode by `itemId`, or a whole series by `seriesId`, the same two kinds a collection holds. Refs are resolved on EVERY render, for the person looking, which is why a card here always shows their own watched state and progress and why a title above their rating cap is never drawn. You cannot supply a card yourself: anything in the resolved fields is discarded."
+      },
+      {
+        "type": "itemGrid",
+        "carries": "refs[] of {itemId} or {seriesId}, optional text",
+        "description": "The same cards, wrapped into a grid instead of one row. Use it when the list is the point of the page rather than a sidebar to it."
+      },
+      {
+        "type": "personList",
+        "carries": "personIds[], optional text",
+        "description": "People, drawn the way a cast row is drawn, each opening their own page."
+      },
+      {
+        "type": "tiles",
+        "carries": "tiles[] of {title, subtitle, mark, art, action}, optional layout / text / more",
+        "description": "A row of circles (the same row the cast is drawn in) or a stacked list, composed from slots rather than from a shape we chose for you. This is how you draw something the vocabulary has no block for: pick the art, the two lines of text and the state mark, and the host draws it natively on every surface.",
+        "notes": "`layout` is \"row\" (circles in a strip, the default) or \"list\" (one per line, symbol left, text right). Each tile's `art` is tried in order: `personId` (the host resolves the face and the name, for the viewer looking), `itemId` (the host resolves the poster, and the tile keeps its fallback when that viewer's rating cap excludes it), `url` (fetched and re-hosted like an images block), then what the host DRAWS for you: `monogram` (up to 5 letters in a tinted disc) or `glyph`, and a tile with none of them falls back to its own initials. `mark` overlays the art with the tile's state. `more` is a trailing see-all tile carrying a link, so a capped row always says how to see the rest. You supply ids and letters; the host supplies pictures. Anything you put in the resolved fields is discarded, exactly as it is for a shelf."
       }
     ],
     "actions": [
@@ -304,17 +398,68 @@
         "kind": "person",
         "carries": "personId",
         "description": "Open a cast or crew member's page."
+      },
+      {
+        "kind": "page",
+        "carries": "pageId, params",
+        "description": "Open one of your own declared pages. The server stamps your plugin id on the link, so a link always leads somewhere the person installed; a link to a page you did not declare is dropped rather than drawn as a button that fails."
       }
     ],
     "bounds": {
-      "description": "Enforced server-side, so a plugin cannot make a page enormous and a client can size its renderer knowing the ceiling. A half-built block (a fact row with no value, a links block with no valid action) is dropped rather than rendered broken.",
+      "description": "Enforced server-side, so a plugin cannot make a page enormous and a client can size its renderer knowing the ceiling. A half-built block (a fact row with no value, a links block with no valid action, a container with no usable ids) is dropped rather than rendered broken. A whole page gets maxPageBlocks; a section on somebody else's page gets maxBlocks.",
       "maxBlocks": 12,
       "maxRows": 24,
       "maxItemsInList": 24,
       "maxTextRunes": 2000,
-      "maxLabelRunes": 120
+      "maxLabelRunes": 120,
+      "maxPageBlocks": 24,
+      "maxContainerIds": 60
     },
-    "attribution": "Every section names the plugin that wrote it, on every surface. Someone seeing unfamiliar text on their own library must always be able to tell where it came from."
+    "attribution": "Every section on a detail page is headed by your plugin's name, on every surface, and you cannot change that heading. Someone seeing unfamiliar content on their own library must always be able to tell where it came from, and a heading they can read says it better than a line of small print under one.",
+    "tileSlots": {
+      "description": "The closed sets a tile's slots may name. A value outside a set is dropped rather than passed on, because a client that does not know a name draws nothing at all.",
+      "layouts": [
+        "row",
+        "list"
+      ],
+      "marks": [
+        {
+          "mark": "none",
+          "description": "No overlay."
+        },
+        {
+          "mark": "check",
+          "description": "A filled check. Use it for a state that is settled and positive: won, earned, verified."
+        },
+        {
+          "mark": "ring",
+          "description": "An open ring. The counterpart to a check: nominated, pending, in progress."
+        }
+      ],
+      "glyphs": [
+        "trophy",
+        "laurel",
+        "star",
+        "medal",
+        "film",
+        "tv",
+        "music",
+        "globe"
+      ],
+      "glyphNote": "Deliberately generic. We draw these ourselves in each platform's own idiom, so do not expect a ceremony's or a service's own logo: a real logo is a trademark, and a plugin cannot licence one on our behalf. A monogram beside a generic glyph is how you say which body an award came from.",
+      "tints": [
+        "gold",
+        "silver",
+        "bronze",
+        "accent",
+        "red",
+        "green",
+        "blue",
+        "gray"
+      ],
+      "tintNote": "Named rather than free-form, because the viewer picks the theme and you cannot know it. A tint you do not set draws the neutral disc.",
+      "maxMonogramRunes": 5
+    }
   },
   "manifest": {
     "description": "manifest.json sits at the root of your package and is the signed document. It names every other file with its hash, so a signed manifest fully determines the package: an unlisted extra, a missing file, a size mismatch or a hash mismatch all refuse the package.",
@@ -340,9 +485,14 @@
         "description": "The plugin API you were built against. A server refuses a package whose apiVersion it does not speak."
       },
       {
+        "key": "minHostVersion",
+        "required": false,
+        "description": "The oldest Multipass release that can draw everything you send (major.minor.patch). apiVersion says the contract is the same one; this says the build is new enough for the parts of it you use, which is the question every additive block type raises. A server older than this refuses the install and names the version it needs, instead of running your plugin and silently dropping what it cannot draw."
+      },
+      {
         "key": "entry",
-        "required": true,
-        "description": "The .wasm file inside the package."
+        "required": false,
+        "description": "The .wasm file inside the package. Required for every family except a theme pack, which is data and has no code to point at."
       },
       {
         "key": "description",
@@ -367,7 +517,7 @@
       {
         "key": "capabilities",
         "required": false,
-        "description": "`{ \"http\": [\"api.example.com\"], \"storage\": true }`. Absent means no powers at all. This is a CLOSED set: an unknown key fails the parse, because a grant the host cannot enforce is one the owner would be shown and we would not apply."
+        "description": "`{ \"http\": [\"api.example.com\"], \"storage\": true, \"library\": true }`. Absent means no powers at all. This is a CLOSED set: an unknown key fails the parse, because a grant the host cannot enforce is one the owner would be shown and we would not apply."
       },
       {
         "key": "events",
@@ -375,9 +525,24 @@
         "description": "The events you ask to be told about, e.g. [\"playback.started\", \"playback.stopped\"]. Declared rather than requested at runtime so the install screen can say in plain words what you will learn. An events plugin must name at least one, and naming any requires declaring the events family."
       },
       {
+        "key": "pages",
+        "required": false,
+        "description": "The pages you serve, e.g. `[{ \"id\": \"director\", \"title\": \"Directed by\", \"subject\": \"person\", \"cacheSeconds\": 3600 }]`. A page must be declared to be addressable: the server answers an undeclared id with a 404 and never starts your plugin. `subject` is `person`, `item`, or absent; `cacheSeconds` defaults to 900 and cannot exceed a day. Declaring any page requires the pages family, and a pages plugin must declare at least one."
+      },
+      {
         "key": "settings",
         "required": false,
-        "description": "Owner-editable settings, rendered as rows in your hub card."
+        "description": "Settings a person edits, rendered as rows in your card. `scope` decides whose they are: absent or `server` means the owner sets one value for the household, `profile` means each person sets their own and your default is the fallback. At most 32."
+      },
+      {
+        "key": "themes",
+        "required": false,
+        "description": "What a theme pack ships: up to 12 looks, each `{ id, name, accent, focus, bg, gradient: [from, to], panel, text, dim, cardRadius, bgImage }`. Colours are `#rrggbb` and the gradient is exactly two of them. `bgImage` names a .jpg or .png inside your own package, so it is hash-verified like everything else. Every field is checked at install: signing says who wrote a pack, never that its colours are colours."
+      },
+      {
+        "key": "actions",
+        "required": false,
+        "description": "Buttons the host draws beside your settings, e.g. `[{ \"id\": \"test\", \"label\": \"Test connection\" }]`. Pressing one calls `settings.action` with that id and shows the sentence you return. `scope` works exactly as it does for a setting: `server` puts the button in the owner's card, `profile` puts it on each person's own preferences. At most 8."
       },
       {
         "key": "limits",
@@ -398,7 +563,19 @@
       "select"
     ],
     "settingNote": "A `password` setting is write-only to the API: an owner can replace it, never read it back out of the server they are configuring.",
-    "linking": "A plugin in the events family is connected per person, not per server. The owner's settings and the person's credentials are separate: settings are server-wide and owner-edited (a Trakt application, say), while the account each person connects is held as opaque state the host passes to you and stores back."
+    "linking": "A plugin in the events family is connected per person, not per server. The owner's settings and the person's credentials are separate: settings are server-wide and owner-edited (a Trakt application, say), while the account each person connects is held as opaque state the host passes to you and stores back.",
+    "pageNote": "A page's `id` param is reserved: declare a subject and the host resolves that param into the real thing before calling you. Every other param is yours, at most 6 of them, and they are part of the page's address rather than a place to put state.",
+    "settingScopes": [
+      {
+        "key": "server",
+        "description": "The owner sets one value for the whole household. This is what absent means, so every manifest written before scopes existed still means exactly what it meant."
+      },
+      {
+        "key": "profile",
+        "description": "Each person sets their own, on their own settings screen, and your manifest default is the fallback for anyone who has not. The owner does not set it: a second default nobody could see would be a worse answer than yours. A password may not be per-profile."
+      }
+    ],
+    "actionNote": "An action returns one sentence, never blocks. That bound is deliberate: blocks are OUTPUT and settings are INPUT, and letting a button paint a card would make the settings screen a second block renderer on every surface."
   },
   "limits": {
     "description": "What bounds a plugin at runtime. Each has a default you get by saying nothing, and a ceiling you cannot exceed.",
@@ -413,7 +590,22 @@
       "note": "A call that runs past its deadline is killed by closing the module, because the runtime has no instruction metering. The next call rebuilds it, so a timeout costs latency, not a dead plugin."
     },
     "concurrency": "One call at a time per plugin.",
-    "faults": "Five consecutive faults auto-disable a plugin, and the hub says why. A returned `error` is not a fault: that is the plugin working."
+    "faults": "Five consecutive faults auto-disable a plugin, and the hub says why. A returned `error` is not a fault: that is the plugin working.",
+    "pages": {
+      "maxPages": 8,
+      "maxParams": 6,
+      "cacheSecondsDefault": 900,
+      "cacheSecondsMax": 86400,
+      "maxLookupIds": 100,
+      "note": "A page's blocks are cached for cacheSeconds; the refs inside a container block are resolved fresh for whoever is looking, every time."
+    },
+    "settings": {
+      "maxFields": 32,
+      "maxActions": 8,
+      "actionsPerMinute": 10,
+      "maxProfileValueRunes": 512,
+      "note": "The press limit counts every profile together, because the thing it protects is whatever your button calls out to. A press past it is refused before your plugin is asked."
+    }
   },
   "package": {
     "extension": ".mpp",
@@ -426,7 +618,28 @@
     "trust": "The node that serves the catalog is dumb storage: it stores and serves and never signs. Every server verifies the catalog against keys compiled into its own binary, so whoever controls the host can serve a stale catalog or none at all, and nothing worse.",
     "consent": "An owner is shown exactly what a plugin may do BEFORE anything is downloaded. A package whose manifest asks for more than the catalog advertised is refused, because that approval was not for this plugin. Asking for less is always fine.",
     "updates": "A new version that wants a NEW power is flagged as a new decision rather than treated as consent to update.",
-    "withdrawal": "A signed kill switch can withdraw a plugin. Servers honor it on a daily check and whenever an owner opens their plugins page. A withdrawn plugin is switched off with its reason shown, cannot be re-enabled, and cannot be reinstalled. It is never deleted: the owner needs to see what happened, and a plugin's data outliving a bad release is worth more than a tidy directory."
+    "withdrawal": "A signed kill switch can withdraw a plugin. Servers honor it on a daily check and whenever an owner opens their plugins page. A withdrawn plugin is switched off with its reason shown, cannot be re-enabled, and cannot be reinstalled. It is never deleted: the owner needs to see what happened, and a plugin's data outliving a bad release is worth more than a tidy directory.",
+    "richListing": "A published catalog entry can carry listing fields beyond the v1 set, all written by the store from your listing rather than by your manifest: category (one key from the list below), ageTier (your self-declared tier, review-verified), developer (your public developer name), releaseNotes (the current version's notes), purposes (your one-line reason per grant, keyed http, storage and library, shown on the store's privacy card beside the grant sentences), images (each with a kind of icon, banner or shot, an id that is the sha256 of the bytes, and a registry-relative path), installs and trending (distinct linked servers all-time and over the past 30 days), and events (the events your manifest declares, so the pre-install screen can say what the plugin can be told). Every field is optional and additive. Servers fetch and verify each image against its pinned sha256 and proxy it to their own clients, so a tampered image can never render and a viewer never contacts the registry.",
+    "categories": [
+      "metadata-artwork",
+      "ratings-awards",
+      "watch-sync",
+      "discovery",
+      "subtitles",
+      "skipping",
+      "media-types",
+      "channels-streams",
+      "live-tv-dvr",
+      "appearance",
+      "tools"
+    ],
+    "ageTiers": [
+      "everyone",
+      "teen",
+      "mature",
+      "adult"
+    ],
+    "beta": "Testing builds reach real servers through a per-account beta catalog: a linked server asks the cloud, with its own server credential, for the beta builds its account may see, meaning the account is the plugin's developer, an invited tester (each plugin can invite up to 10, by email that must match a Multipass account), or a reviewer looking at submitted builds. The beta catalog and its packages are signed with the same keys as everything published, so install, consent screen and kill switch are identical to production; the entries simply appear in the owner's hub marked Beta. A testing build drops out 90 days after upload. An unlinked server, or one whose account was invited to nothing, sees no trace of any of this."
   },
   "policy": {
     "title": "What the registry will and will not list",
@@ -454,5 +667,17 @@
         "why": "A TV has no browser engine to run it in, and a per-client plugin UI contract is the thing that killed the last generation of media-server plugins. Plugins ship data; the apps render it."
       }
     ]
+  },
+  "settings": {
+    "description": "Settings are the one way a person types anything at a plugin. Blocks are output and settings are input, which is why this contract grows and the block vocabulary does not.",
+    "op": {
+      "op": "settings.action",
+      "input": "{ action, locale, profile? }",
+      "output": "{ ok, message }",
+      "description": "One declared button was pressed. `action` is the id from your manifest. `profile` is who pressed it and arrives ONLY for a profile-scoped action: a server action is the owner acting for the household, and you do not learn which person clicked. `message` is one sentence, shown as-is, and may be a string key from your catalog.",
+      "notes": "Read your settings the way you always do, through `config`: they are already merged for whoever pressed the button."
+    },
+    "cache": "A page from a plugin that declares any profile-scoped setting is cached PER VIEWER, because what you return can now differ by person. A plugin that declares none caches exactly as before. Item text from `describe.item` is stored once per item and shared by the household, so it always sees the server view: a per-profile setting cannot change it.",
+    "storage": "A per-profile value is the host's to keep, not yours. It is stored beside the owner's settings, goes when the profile goes, and goes when the plugin is removed."
   }
 }

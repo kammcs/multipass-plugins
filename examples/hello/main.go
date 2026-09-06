@@ -76,6 +76,18 @@ func respond(r response) int64 {
 
 //go:wasmexport mp_handle
 func mpHandle(ptr, n int32) int64 {
+	// Release the previous call's buffers. mp_alloc is driven by the HOST:
+	// once for this call's input, and again for every host-function reply
+	// (config, http, storage, lookup). Nothing else ever frees them, so
+	// without this the guest's memory only grows, and a long run over a real
+	// library dies on "out of memory". By the time a new call arrives the
+	// host has finished reading the last reply, so everything except the
+	// input just written is done with.
+	for k := range live {
+		if k != ptr {
+			delete(live, k)
+		}
+	}
 	var req request
 	if err := json.Unmarshal(read(ptr, n), &req); err != nil {
 		return respond(response{Error: "malformed request"})

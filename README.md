@@ -31,6 +31,8 @@ Start by copying whichever is closest to what you want.
 | `anilist` | A real matching service against a public API: the `http` grant, caching through `storage`, and settings that change behaviour |
 | `eventdemo` | An event consumer with no network: linking, and what a delivery looks like |
 | `trakt` | A real scrobbler: device-code sign-in per person, token refresh, and what to do when the far end revokes an account |
+| `pagedemo` | Two whole pages of its own, with NO permissions at all: the host resolves a page's subject, so a plugin that would otherwise need to read the library needs no grant |
+| `awards` | The fullest example: a row of award circles on a film's detail page built from `tiles`, a page per film and per person, and the `library` grant used to show which award-winning titles you already hold. It is also the one to read for `tiles`, the block that lets you draw a row the server has no idea about. Start here if you are building something real |
 
 Every one of these is built and run by the server's own test suite on
 every change, so none of them can quietly rot. What is published here is

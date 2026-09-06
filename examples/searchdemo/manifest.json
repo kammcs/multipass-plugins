@@ -1,0 +1,34 @@
+{
+  "id": "theater.multipass.searchdemo",
+  "name": "Search demo",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "minHostVersion": "0.63.0",
+  "description": "A reference search hook with no network at all: it recognises a few film series by the names people actually type and offers their titles as an attributed section under your own results. Used by the test harness.",
+  "author": "Multipass",
+  "entry": "plugin.wasm",
+  "provides": [
+    "search",
+    "pages"
+  ],
+  "pages": [
+    {
+      "id": "series",
+      "title": "A series the search demo knows",
+      "cacheSeconds": 3600
+    }
+  ],
+  "settings": [
+    {
+      "key": "slowMs",
+      "label": "Answer this slowly",
+      "type": "number",
+      "default": "0",
+      "help": "Milliseconds to wait before answering. Set it past a quarter of a second to see what a slow provider costs: the section arrives a keystroke late instead of holding up your results. No real plugin should do this."
+    }
+  ],
+  "limits": {
+    "memoryPages": 64,
+    "timeoutMs": 10000
+  }
+}

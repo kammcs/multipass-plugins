@@ -501,6 +501,18 @@ func clip(s string, n int) string {
 
 //go:wasmexport mp_handle
 func mpHandle(ptr, length int32) int64 {
+	// Release the previous call's buffers. mp_alloc is driven by the HOST:
+	// once for this call's input, and again for every host-function reply
+	// (config, http, storage, lookup). Nothing else ever frees them, so
+	// without this the guest's memory only grows, and a long run over a real
+	// library dies on "out of memory". By the time a new call arrives the
+	// host has finished reading the last reply, so everything except the
+	// input just written is done with.
+	for k := range live {
+		if k != ptr {
+			delete(live, k)
+		}
+	}
 	var call struct {
 		Op   string          `json:"op"`
 		Data json.RawMessage `json:"data"`

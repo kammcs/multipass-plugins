@@ -1,0 +1,17 @@
+{
+  "id": "theater.multipass.subdemo",
+  "name": "Subtitle Demo",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "minHostVersion": "0.63.0",
+  "description": "A reference subtitle provider with no network at all: it offers two pretend releases per language and hands back a short WebVTT naming the one you picked. Used by the test harness.",
+  "author": "Multipass",
+  "entry": "plugin.wasm",
+  "provides": [
+    "subtitles"
+  ],
+  "limits": {
+    "memoryPages": 64,
+    "timeoutMs": 5000
+  }
+}

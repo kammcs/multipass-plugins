@@ -4,7 +4,12 @@
   "title": "Multipass plugin manifest",
   "description": "manifest.json at the root of a .mpp package. This is the document that gets signed, and it names every other file with its hash. Point your editor at this schema for validation and completion as you type. The server's own validator is the authority; a Go contract test keeps the two in step.",
   "type": "object",
-  "required": ["id", "name", "version", "apiVersion", "entry"],
+  "required": [
+    "id",
+    "name",
+    "version",
+    "apiVersion"
+  ],
   "additionalProperties": false,
   "properties": {
     "id": {
@@ -13,7 +18,9 @@
       "pattern": "^[a-z0-9][a-z0-9.-]*[a-z0-9]$",
       "minLength": 3,
       "maxLength": 128,
-      "examples": ["com.example.myplugin"]
+      "examples": [
+        "com.example.myplugin"
+      ]
     },
     "name": {
       "type": "string",
@@ -30,11 +37,18 @@
     "apiVersion": {
       "type": "integer",
       "description": "The plugin API you were built against. A server refuses a package whose apiVersion it does not speak, so an old plugin never half-works.",
-      "enum": [1]
+      "enum": [
+        1
+      ]
+    },
+    "minHostVersion": {
+      "type": "string",
+      "description": "The oldest Multipass release that can draw everything you send, as major.minor.patch. Name one when you use a block type, slot or op that arrived in a particular release: apiVersion says the contract is the same, this says the build is new enough. An older server refuses the install and says which version it needs, which is a better failure than running and drawing nothing. Leave it out if you use nothing new.",
+      "pattern": "^[0-9]{1,6}\\.[0-9]{1,6}\\.[0-9]{1,6}$"
     },
     "entry": {
       "type": "string",
-      "description": "The .wasm file inside the package.",
+      "description": "The .wasm file inside the package. Required for every family except a theme pack, which is data and has no code to point at.",
       "pattern": "^[A-Za-z0-9._-]+\\.wasm$"
     },
     "description": {
@@ -42,7 +56,10 @@
       "description": "One or two sentences, shown in the registry and in the owner's plugin list.",
       "maxLength": 500
     },
-    "author": { "type": "string", "maxLength": 120 },
+    "author": {
+      "type": "string",
+      "maxLength": 120
+    },
     "homepage": {
       "type": "string",
       "description": "Where to read more.",
@@ -55,7 +72,17 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "enum": ["matching", "fields", "search", "events", "subtitles", "segments", "theme", "pages", "source"]
+        "enum": [
+          "matching",
+          "fields",
+          "search",
+          "events",
+          "subtitles",
+          "segments",
+          "theme",
+          "pages",
+          "source"
+        ]
       }
     },
     "events": {
@@ -64,7 +91,13 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "enum": ["playback.started", "playback.paused", "playback.resumed", "playback.stopped", "playback.finished"]
+        "enum": [
+          "playback.started",
+          "playback.paused",
+          "playback.resumed",
+          "playback.stopped",
+          "playback.finished"
+        ]
       }
     },
     "capabilities": {
@@ -76,37 +109,242 @@
           "type": "array",
           "description": "Outbound HTTPS hosts. One leading '*.' wildcard label is allowed. Ports and schemes are not part of a grant: the host function only ever speaks https on the default port, and private, loopback and link-local addresses are refused after DNS with every redirect re-checked.",
           "uniqueItems": true,
-          "items": { "type": "string", "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$" }
+          "items": {
+            "type": "string",
+            "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+          }
         },
         "storage": {
           "type": "boolean",
           "description": "A key-value bucket isolated by plugin id. Removing the plugin removes the bucket."
+        },
+        "library": {
+          "type": "boolean",
+          "description": "The narrow library lookup: external metadata ids in, local item ids out. There is no search, no listing and no filter behind it, so you can ask whether titles you already know about are here and cannot find out what else is."
+        }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "description": "The pages you serve. A page must be declared to be addressable: the server answers an undeclared id with a 404 and never starts your plugin. Requires the pages family, and a pages plugin must declare at least one.",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Lowercase letters, digits and dashes. It is part of the page's address on every surface.",
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+            "maxLength": 40
+          },
+          "title": {
+            "type": "string",
+            "description": "What the page is called when a render does not override it.",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "subject": {
+            "type": "string",
+            "description": "What this page's reserved 'id' param names. The host resolves it before calling you, which is why a page about a person needs no permissions at all.",
+            "enum": [
+              "item",
+              "person"
+            ]
+          },
+          "cacheSeconds": {
+            "type": "integer",
+            "description": "How long a render may be reused. Absent or zero means 900. The cards inside a container block are resolved fresh for every viewer regardless.",
+            "minimum": 0,
+            "maximum": 86400
+          }
         }
       }
     },
     "settings": {
       "type": "array",
-      "description": "Owner-editable settings, rendered as rows in your plugin's card. For an events plugin these are the SERVER-wide values (an application's credentials, say); each person's own account is connected separately and never appears here.",
+      "description": "Settings a person edits, rendered as rows in your plugin's card. Scope decides whose they are. For an events plugin the server-scoped ones are the SERVER-wide values (an application's credentials, say); each person's own account is connected separately and never appears here.",
       "maxItems": 32,
       "items": {
         "type": "object",
-        "required": ["key", "label", "type"],
+        "required": [
+          "key",
+          "label",
+          "type"
+        ],
         "additionalProperties": false,
         "properties": {
-          "key": { "type": "string", "minLength": 1, "maxLength": 64 },
-          "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
           "type": {
             "type": "string",
             "description": "A password setting is write-only to the API: an owner can replace it, never read it back out of the server they are configuring.",
-            "enum": ["text", "password", "number", "toggle", "select"]
+            "enum": [
+              "text",
+              "password",
+              "number",
+              "toggle",
+              "select"
+            ]
           },
-          "default": { "type": "string" },
+          "default": {
+            "type": "string"
+          },
           "options": {
             "type": "array",
             "description": "Required when type is select.",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
-          "help": { "type": "string", "maxLength": 500 }
+          "help": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "scope": {
+            "type": "string",
+            "description": "Whose setting this is. Absent means server: the owner sets one value for the household. profile means each person sets their own on their own settings screen, with your default as the fallback; a password cannot be per-profile, because a value its owner can read back is not a secret.",
+            "enum": [
+              "server",
+              "profile"
+            ]
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "description": "Buttons the host draws beside your settings. Pressing one calls the settings.action op with that id and shows the sentence you return. An action may not return blocks.",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "scope": {
+            "type": "string",
+            "description": "server draws the button in the owner's plugin card and only the owner may press it; profile draws it on each person's own settings screen. Absent means server.",
+            "enum": [
+              "server",
+              "profile"
+            ]
+          },
+          "help": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      }
+    },
+    "themes": {
+      "type": "array",
+      "description": "What a theme pack ships. Requires the theme family, and a theme plugin must declare at least one. There is no code in this family: the signed manifest is the whole payload, so every field is validated at install.",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "accent",
+          "focus",
+          "bg",
+          "gradient",
+          "panel",
+          "text",
+          "dim"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Lowercase letters, digits and dashes. Namespaced by your plugin id before anyone sees it.",
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+            "minLength": 2,
+            "maxLength": 40
+          },
+          "name": {
+            "type": "string",
+            "description": "What the theme is called in the picker.",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "accent": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "description": "Recolours every accented control."
+          },
+          "focus": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "description": "The focus ring and selection highlight."
+          },
+          "bg": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "description": "The page background base."
+          },
+          "gradient": {
+            "type": "array",
+            "description": "Exactly two stops for the page gradient.",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            }
+          },
+          "panel": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "description": "Card and panel surfaces."
+          },
+          "text": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "description": "Body text."
+          },
+          "dim": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "description": "Secondary text."
+          },
+          "cardRadius": {
+            "type": "integer",
+            "description": "Corner rounding, px on web and dp on native.",
+            "minimum": 0,
+            "maximum": 32
+          },
+          "bgImage": {
+            "type": "string",
+            "description": "A .jpg or .png inside your own package, shown behind the app on TV and native. Hash-verified like every packaged file.",
+            "pattern": "^[A-Za-z0-9._-]+\\.(jpg|png)$"
+          }
         }
       }
     },
@@ -134,11 +372,19 @@
       "description": "Every packaged file with its sha256. You do not write this: 'multipass plugins pack' hashes everything and fills it in.",
       "items": {
         "type": "object",
-        "required": ["name", "sha256"],
+        "required": [
+          "name",
+          "sha256"
+        ],
         "additionalProperties": false,
         "properties": {
-          "name": { "type": "string" },
-          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          "name": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
         }
       }
     }

@@ -1,0 +1,52 @@
+{
+  "id": "theater.multipass.pagedemo",
+  "name": "Page demo",
+  "version": "2.1.0",
+  "apiVersion": 1,
+  "description": "The smallest complete plugin page, and the only example that asks for no permissions at all. It adds one link to every film and series, opening a page that shows exactly what the host handed the plugin. It is also the reference for per-profile settings and for both kinds of action button. Install it to see what a plugin page is made of; copy the awards example to build something real.",
+  "author": "Multipass",
+  "entry": "plugin.wasm",
+  "provides": [
+    "fields",
+    "pages"
+  ],
+  "pages": [
+    {
+      "id": "demo",
+      "title": "Inside a plugin page",
+      "subject": "item",
+      "cacheSeconds": 3600
+    }
+  ],
+  "settings": [
+    {
+      "key": "detail",
+      "label": "How much detail",
+      "type": "select",
+      "options": [
+        "full",
+        "short"
+      ],
+      "default": "full",
+      "scope": "profile",
+      "help": "Yours alone. Your housemates each pick their own, and the page is cached per person because of it."
+    }
+  ],
+  "actions": [
+    {
+      "id": "ping",
+      "label": "Test the plugin",
+      "help": "Owner only. Proves the plugin answers."
+    },
+    {
+      "id": "mine",
+      "label": "What do I see?",
+      "scope": "profile",
+      "help": "Yours. Says which version of the page you get."
+    }
+  ],
+  "limits": {
+    "memoryPages": 64,
+    "timeoutMs": 5000
+  }
+}

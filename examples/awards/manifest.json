@@ -1,0 +1,55 @@
+{
+  "id": "theater.multipass.awards",
+  "name": "Awards",
+  "version": "1.1.0",
+  "apiVersion": 1,
+  "minHostVersion": "0.62.0",
+  "entry": "plugin.wasm",
+  "description": "Awards and nominations from Wikidata. A film's page gains a row of award circles beside its cast: who gave it, what for, and whether it was won or only nominated. A person's page lists their awards and shows which of the winning titles are already in your library. Needs no account and no API key.",
+  "author": "Multipass",
+  "homepage": "https://www.wikidata.org",
+  "provides": [
+    "fields",
+    "pages"
+  ],
+  "capabilities": {
+    "http": [
+      "query.wikidata.org"
+    ],
+    "storage": true,
+    "library": true
+  },
+  "pages": [
+    {
+      "id": "title",
+      "title": "Awards and nominations",
+      "subject": "item",
+      "cacheSeconds": 86400
+    },
+    {
+      "id": "person",
+      "title": "Awards",
+      "subject": "person",
+      "cacheSeconds": 86400
+    }
+  ],
+  "settings": [
+    {
+      "key": "majorOnly",
+      "label": "Major ceremonies only",
+      "type": "toggle",
+      "default": "true",
+      "help": "Academy Awards, BAFTA, Golden Globes, Emmys, Screen Actors Guild, Cannes and Venice. Turn this off to show everything Wikidata holds, which for a well-known film runs to dozens of regional critics' prizes."
+    },
+    {
+      "key": "contact",
+      "label": "Contact address",
+      "type": "text",
+      "help": "Wikidata's query service asks every caller to identify itself, and throttles the ones that do not. An email or a URL is enough. Leave it blank and requests still work, just with a generic name and a lower rate limit."
+    }
+  ],
+  "limits": {
+    "memoryPages": 256,
+    "timeoutMs": 20000
+  }
+}

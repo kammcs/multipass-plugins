@@ -1,7 +1,7 @@
 {
   "id": "theater.multipass.anilist",
   "name": "AniList",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "apiVersion": 1,
   "description": "Matches anime against AniList, which knows series and films that general movie databases handle poorly. Fills in episode titles too.",
   "author": "Multipass",
@@ -37,7 +37,7 @@
     }
   ],
   "limits": {
-    "memoryPages": 128,
+    "memoryPages": 256,
     "timeoutMs": 15000
   }
 }

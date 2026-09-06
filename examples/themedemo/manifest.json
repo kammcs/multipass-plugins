@@ -1,0 +1,39 @@
+{
+  "id": "theater.multipass.themedemo",
+  "name": "Dusk & Tide",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "minHostVersion": "0.63.0",
+  "description": "Two looks and nothing else: a reference theme pack. It ships no code at all, which is the whole point of the family.",
+  "author": "Multipass",
+  "provides": [
+    "theme"
+  ],
+  "themes": [
+    {
+      "id": "dusk",
+      "name": "Dusk",
+      "accent": "#f0a868",
+      "focus": "#ffc48c",
+      "bg": "#161320",
+      "gradient": ["#241d33", "#0f0d16"],
+      "panel": "#211c2e",
+      "text": "#f1ecf6",
+      "dim": "#a294b8",
+      "cardRadius": 14,
+      "bgImage": "dusk.png"
+    },
+    {
+      "id": "tide",
+      "name": "Tide",
+      "accent": "#3fb9c9",
+      "focus": "#7fe0ec",
+      "bg": "#0d1618",
+      "gradient": ["#122225", "#07100f"],
+      "panel": "#132022",
+      "text": "#e2f2f3",
+      "dim": "#8aa8ab",
+      "cardRadius": 8
+    }
+  ]
+}

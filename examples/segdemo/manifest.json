@@ -1,0 +1,33 @@
+{
+  "id": "theater.multipass.segdemo",
+  "name": "Segment Demo",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "minHostVersion": "0.63.0",
+  "description": "A reference skip-marker provider with no network at all: it derives an intro, a recap and a credits marker from the item it is asked about. Used by the test harness.",
+  "author": "Multipass",
+  "entry": "plugin.wasm",
+  "provides": [
+    "segments"
+  ],
+  "settings": [
+    {
+      "key": "introSeconds",
+      "label": "Title sequence length",
+      "type": "number",
+      "default": "60",
+      "help": "How long the intro marker runs, in seconds."
+    },
+    {
+      "key": "off",
+      "label": "Answer nothing",
+      "type": "toggle",
+      "default": "false",
+      "help": "Set to prove that a provider with nothing to say is asked once and then left alone."
+    }
+  ],
+  "limits": {
+    "memoryPages": 64,
+    "timeoutMs": 5000
+  }
+}
