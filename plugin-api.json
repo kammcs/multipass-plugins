@@ -330,16 +330,16 @@
       "ops": [
         {
           "op": "source.sync",
-          "input": "{ library: { shape, config }, cursor, since }",
+          "input": "{ library: { shape, config, key }, cursor, since }",
           "output": "{ series: [...], items: [...], next, complete }",
-          "description": "One page of your catalog. `config` is what the owner filled in when they added the library. Return `next` to be called again for the rest, and `complete: true` on the last page of a FULL enumeration. An item is `{ externalId, title, year, releaseDate, overview, genres, runtimeMin, poster, backdrop, still, series, season, episode, certs, meta, durationS }`; a series is the same minus the episode fields. `externalId` is yours and must be stable, because it is the identity of the row.",
+          "description": "One page of your catalog. `config` is what the owner filled in when they added the library. Return `next` to be called again for the rest, and `complete: true` on the last page of a FULL enumeration. An item is `{ externalId, title, year, releaseDate, overview, genres, runtimeMin, poster, backdrop, still, series, season, episode, certs, meta, durationS }`; a series is the same minus the episode fields. `externalId` is yours and must be stable, because it is the identity of the row. `library.key` says WHICH of your libraries this is, and it is present only for a channel (D177): a plugin with a single `source` block is never sent one and needs no change.",
           "notes": "`complete: true` is the ONLY thing that authorizes removing what you did not list, and a page that also carries `next` is not complete whatever it claims. That is deliberate: a sync that failed halfway has seen part of a catalog, and a service being briefly unreachable must never empty somebody's library. At most 200 series and 200 items per page, 20,000 items per library. A row with no `externalId` or no `title` is dropped rather than repaired."
         },
         {
           "op": "source.resolve",
-          "input": "{ library: { shape, config }, item: { externalId, series, season, episode, title } }",
+          "input": "{ library: { shape, config, key }, item: { externalId, series, season, episode, title } }",
           "output": "{ url, headers, expiresAt, hint }",
-          "description": "The stream behind one of your items, asked when somebody presses Play. `url` is fetched by the SERVER, which probes it and serves the viewer the same HLS session it serves for a file on disk: no URL, header or token of yours ever reaches a device. `headers` ride that fetch; `expiresAt` is unix seconds and says how long the URL is good for; `hint` is advisory.",
+          "description": "The stream behind one of your items, asked when somebody presses Play. `url` is fetched by the SERVER, which probes it and serves the viewer the same HLS session it serves for a file on disk: no URL, header or token of yours ever reaches a device. `headers` ride that fetch; `expiresAt` is unix seconds and says how long the URL is good for; `hint` is advisory. `library.key` says which of your libraries the item came out of, spelled exactly as it is on a sync, and is absent for a single-source plugin.",
           "notes": "This is the second op that runs while a person is waiting, and it has a 10 second budget. A failure becomes an honest message on screen, never a spinner. Two rules on what you may return, and both are what the owner agreed to at install: the host must be one your manifest asked permission for, and the address must be https (a loopback address is the one exception, because there is no network in between). The resolution is cached until it expires, so a resume costs you nothing; say when it expires or it is reused for 15 minutes."
         }
       ],
@@ -352,6 +352,29 @@
         "Your address may redirect, and that is expected: return the address your service publishes rather than hunting for the file server behind it. The server settles the chain itself before it fetches, so ffmpeg is handed the address that actually serves the bytes. The GRANT binds only the address YOU returned. Where the granted host sends the server next is that host's business and is not held to your manifest, so you never have to name a CDN nobody could have judged at install; every hop is still held to https and to a destination outside the household network, and a hop that fails either is refused, with Play saying so rather than fetching it anyway.",
         "A duration or container you declare is a HINT and is stored as one. The server probes the stream at first play and acts on what it measured, because you cannot know what this server will have to do to something it has not seen. Playback is never direct: a remote stream is remuxed at minimum, so a device only ever talks to this server.",
         "Your own plugin id is a lookup namespace. With the `library` grant, asking `lookup` for your own id maps the external ids you filed things under onto local items, which is how a search result knows whether to open an item somebody already has or one of your pages. Two limits, and both are about whose library it is: you are answered only in your OWN namespace, and a call with nobody behind it (a search, whose one answer is cached for the whole house) is answered only about libraries everybody can see. So a library that belongs to one person never turns up in an answer everybody gets, and a row pointing at something the viewer cannot open is dropped before they see it."
+      ]
+    },
+    {
+      "id": "channel",
+      "title": "Channels",
+      "status": "available",
+      "description": "Several libraries behind one card, with a page of your own. A channel is one entry on the household's Channels shelf: open it and you get the page you shipped, made of your libraries. Its libraries are ordinary plugin libraries (they sync and play through the source ops, so a channel declares the source family too), with one difference: they do not appear on the home page or in the library list, because the channel is where people browse them. Everything else still finds them, so a title of yours turns up in search, in Keep Watching, in a playlist and in the queue, under the household rating cap like anything else. Ruled in D177.",
+      "notes": "Your page is a LAYOUT, not a render. You describe rows and the server draws them out of what it already has: a hero and a shelf from one of your libraries, a heading, and a `slot` that is yours to render. That is why a channel page needs nothing new on any client, and why the household can rearrange it. The owner reorders, hides, retunes and adds host-drawn rows; your default stays underneath, so an update that adds a row shows it at the bottom without moving anything a person arranged. A `slot` is the one row only you can supply, which also means an owner may hide one but never add one.",
+      "ops": [
+        {
+          "op": "channel.render",
+          "input": "{ slot, locale }",
+          "output": "{ blocks: [...] }",
+          "description": "One `slot` row of your channel page, in the ordinary block vocabulary. `slot` is the id of a slot block in the layout you shipped; a slot you did not declare is never asked for. Return whatever a page returns, up to 24 blocks.",
+          "notes": "Cached under the slot's `cacheSeconds` (900 by default, a day at most), per locale, and per viewer when you declare a per-profile setting. The refs and tiles inside are still resolved for the person looking on every render, so a cached slot never carries somebody else's watched state and never shows a title above their rating cap. There is no viewer id in the call: who is asking reaches you only as whose settings you read."
+        }
+      ],
+      "conventions": [
+        "Give every library a `key` (lowercase letters, digits and dashes) and a `name`. The key is how a sync and a resolve say which library they are about, and how a layout row points at one, so it has to be stable: changing it in an update is a new library.",
+        "`account` belongs to the channel, not to each library. A channel with `account: \"profile\"` is created whole when somebody presses Connect and removed whole when they Disconnect, and its card is on the shelf only for them; a library entry declaring an account of its own is refused.",
+        "`art` names a .jpg or .png inside your own package, so it is hash-verified like every other file you ship and is served from this server. It is the card, so a 16:9 picture is the shape to draw.",
+        "Layout ids are the merge key between your default and the household's edits. Keep them stable across versions, or an update loses whatever was arranged on that row and nobody will have touched it.",
+        "Ask for the sorts and shapes in the channelLayout vocabulary and nothing else. They are the library view's own orderings, so a row of yours costs the server no more than one of ours."
       ]
     }
   ],
@@ -391,9 +414,9 @@
       },
       {
         "type": "itemShelf",
-        "carries": "refs[] of {itemId} or {seriesId}, optional text",
+        "carries": "refs[] of {itemId} or {seriesId}, optional text / more",
         "description": "A scrolling row of library titles, drawn as the ordinary cards the rest of the app uses. You supply refs; the server draws the cards.",
-        "notes": "A ref names ONE thing: a film or episode by `itemId`, or a whole series by `seriesId`, the same two kinds a collection holds. Refs are resolved on EVERY render, for the person looking, which is why a card here always shows their own watched state and progress and why a title above their rating cap is never drawn. You cannot supply a card yourself: anything in the resolved fields is discarded."
+        "notes": "A ref names ONE thing: a film or episode by `itemId`, or a whole series by `seriesId`, the same two kinds a collection holds. Refs are resolved on EVERY render, for the person looking, which is why a card here always shows their own watched state and progress and why a title above their rating cap is never drawn. You cannot supply a card yourself: anything in the resolved fields is discarded. `more` is the trailing see-all, the same slot a tiles row carries: a row you had to cut short says where the rest is (usually a `library` action) instead of quietly ending, and a see-all pointing somewhere this viewer may not go is dropped rather than drawn."
       },
       {
         "type": "itemGrid",
@@ -407,9 +430,33 @@
       },
       {
         "type": "tiles",
-        "carries": "tiles[] of {title, subtitle, mark, art, action}, optional layout / text / more",
-        "description": "A row of circles (the same row the cast is drawn in) or a stacked list, composed from slots rather than from a shape we chose for you. This is how you draw something the vocabulary has no block for: pick the art, the two lines of text and the state mark, and the host draws it natively on every surface.",
-        "notes": "`layout` is \"row\" (circles in a strip, the default) or \"list\" (one per line, symbol left, text right). Each tile's `art` is tried in order: `personId` (the host resolves the face and the name, for the viewer looking), `itemId` (the host resolves the poster, and the tile keeps its fallback when that viewer's rating cap excludes it), `url` (fetched and re-hosted like an images block), then what the host DRAWS for you: `monogram` (up to 5 letters in a tinted disc) or `glyph`, and a tile with none of them falls back to its own initials. `mark` overlays the art with the tile's state. `more` is a trailing see-all tile carrying a link, so a capped row always says how to see the rest. You supply ids and letters; the host supplies pictures. Anything you put in the resolved fields is discarded, exactly as it is for a shelf."
+        "carries": "tiles[] of {title, subtitle, badge, text, mark, progress, watched, art, action, links}, optional layout / shape / rotateSeconds / text / more",
+        "description": "A row, list, grid or hero of cards, composed from slots rather than from a shape we chose for you. This is how you draw something the vocabulary has no block for: pick the arrangement, the card, the art, the text and the state mark, and the host draws it natively on every surface.",
+        "notes": "`layout` is how tiles are ARRANGED: \"row\" (a strip that scrolls sideways, the default), \"list\" (one per line, symbol left, text right), \"grid\" (wraps, the library's own shape) or \"hero\" (one card fills the width, dots page through the rest). `shape` is what one tile IS: \"circle\" (the cast disc, the default), \"wide\" (16:9), \"poster\" (2:3) or \"square\". They are separate so every arrangement can draw every card. A hero has no shape and is the only layout that keeps `rotateSeconds` (0 is off, anything else is clamped to 4..60), a tile's `text` and a tile's `links`; on every other layout those three are cleared. Each tile's `art` is tried in order: `personId` (the host resolves the face and the name, for the viewer looking), `itemId` (the host resolves the poster and the backdrop, and the tile keeps its fallback when that viewer's rating cap excludes it), `seriesId` (the same two pictures for a whole show, with the same cap; a show has no single progress row, so a series tile keeps the `progress` and `watched` you sent rather than having them replaced), `wideUrl` and `url` (fetched and re-hosted like an images block; a wide card and a hero prefer the landscape one), then what the host DRAWS for you: `monogram` (up to 5 letters in a tinted disc) or `glyph`, and a tile with none of them falls back to its own initials. `mark` overlays the art with the tile's state; `badge` is the chip on it; `progress` (0..1) and `watched` are the bar and the tick, and a tile whose art names an `itemId` gets the VIEWER's own progress written over whatever you sent, so you can never draw a wrong tick on a title the host knows. `more` is a trailing see-all tile carrying a link, so a capped row always says how to see the rest. You supply ids and letters; the host supplies pictures. Anything you put in the resolved fields is discarded, exactly as it is for a shelf."
+      },
+      {
+        "type": "stats",
+        "carries": "stats[] of {value, label, tint}, optional text",
+        "description": "Figures worth reading at a glance: the value drawn large, its caption underneath. Use it for the number that is the point of your section, rather than burying it in a fact row.",
+        "notes": "Up to 8. A stat missing either string is dropped, because a big number with no caption says nothing and a caption with no number is a fact list row in the wrong block. `tint` comes from the same closed set a tile's disc uses."
+      },
+      {
+        "type": "progress",
+        "carries": "bars[] of {label, value, text}, optional text",
+        "description": "Labelled bars, for how far through something is: a season, a collection, a download.",
+        "notes": "`value` is a fraction from 0 to 1 and is clamped (anything that is not a number reads as 0). `text` is the optional figure drawn at the bar's end, so you phrase \"6 of 10\" yourself rather than having the host guess. A bar with no label is dropped."
+      },
+      {
+        "type": "notice",
+        "carries": "text, tone, links[] of one {label, action}",
+        "description": "One line of state with the obvious response attached: \"Connected as kelly\" and a Disconnect button.",
+        "notes": "At most ONE button. The moment there are two responses it is a menu, and a menu is what `links` already draws. `tone` names the meaning (info, success, warning) and each client picks the colour out of the viewer's theme; an unknown tone reads as info rather than dropping the block, because the words are the notice."
+      },
+      {
+        "type": "columns",
+        "carries": "columns[] of {blocks[]}, optional split",
+        "description": "Two or three columns of blocks, side by side on a wide screen and stacked in column order on a phone and on both TV skins.",
+        "notes": "The only block that holds other BLOCKS, and the only one an older app cannot degrade on its own, which is why the display vocabulary carries a version (see `vocabulary`). Nesting is one level: a columns block inside a column is dropped. Each column holds at most 8 blocks, an empty column is dropped, and fewer than two left drops the whole block. `split` only means something for two columns (\"wideLeft\" is 2:1, \"wideRight\" is 1:2); three columns are always equal. The whole thing counts as ONE block toward the page ceiling."
       }
     ],
     "actions": [
@@ -429,6 +476,16 @@
         "description": "Open a cast or crew member's page."
       },
       {
+        "kind": "series",
+        "carries": "seriesId",
+        "description": "Open a show. Resolved for the person looking, exactly as `item` is: a series they may not see is dropped, and a tile whose only action was that series is dropped with it rather than drawn as a card that opens nothing."
+      },
+      {
+        "kind": "library",
+        "carries": "libraryId",
+        "description": "Open a library's own browse view. Use it for the trailing see-all on a row you had to cut short. A library hidden from the person looking is dropped, and there is no rating cap to apply here: the cap applies to what the browse view then draws, the same way it does when they reach it from the home screen."
+      },
+      {
         "kind": "page",
         "carries": "pageId, params",
         "description": "Open one of your own declared pages. The server stamps your plugin id on the link, so a link always leads somewhere the person installed; a link to a page you did not declare is dropped rather than drawn as a button that fails."
@@ -442,14 +499,56 @@
       "maxTextRunes": 2000,
       "maxLabelRunes": 120,
       "maxPageBlocks": 24,
-      "maxContainerIds": 60
+      "maxContainerIds": 60,
+      "maxStats": 8,
+      "maxStatValueRunes": 16,
+      "maxColumns": 3,
+      "maxColumnBlocks": 8
     },
     "attribution": "Every section on a detail page is headed by your plugin's name, on every surface, and you cannot change that heading. Someone seeing unfamiliar content on their own library must always be able to tell where it came from, and a heading they can read says it better than a line of small print under one.",
     "tileSlots": {
-      "description": "The closed sets a tile's slots may name. A value outside a set is dropped rather than passed on, because a client that does not know a name draws nothing at all.",
+      "description": "The closed sets a tile's slots may name. A value outside a set is dropped rather than passed on, because a client that does not know a name draws nothing at all. A tile's `art` is not a set but a precedence: `personId`, `itemId`, `seriesId`, `wideUrl`, `url`, then `monogram` or `glyph` in a `tint`, then the tile's own initials.",
       "layouts": [
         "row",
-        "list"
+        "list",
+        "grid",
+        "hero"
+      ],
+      "layoutNotes": [
+        {
+          "layout": "row",
+          "description": "A strip that scrolls sideways, the way the cast row does. The default, and what an unknown layout falls back to."
+        },
+        {
+          "layout": "list",
+          "description": "One tile per line, symbol left and text right. The honest default for search results, which are read down the page."
+        },
+        {
+          "layout": "grid",
+          "description": "Wraps onto as many lines as it needs, the library view's own shape. Use it when the list is the point of the page rather than a strip beside it."
+        },
+        {
+          "layout": "hero",
+          "description": "One tile fills the width and dots page through the rest. The only layout that keeps rotateSeconds, a tile's text and a tile's links, and the only one with no shape: it is the shape."
+        }
+      ],
+      "shapes": [
+        {
+          "shape": "circle",
+          "description": "The cast row's disc, and the default. Art is cropped to a circle, so a face or a monogram reads and a poster does not."
+        },
+        {
+          "shape": "wide",
+          "description": "The 16:9 shelf card. Prefers art.wideUrl (or the host's backdrop) over the portrait picture."
+        },
+        {
+          "shape": "poster",
+          "description": "The 2:3 card the library draws films and series as."
+        },
+        {
+          "shape": "square",
+          "description": "1:1, for album art, podcast covers and anything else that ships square."
+        }
       ],
       "marks": [
         {
@@ -463,6 +562,14 @@
         {
           "mark": "ring",
           "description": "An open ring. The counterpart to a check: nominated, pending, in progress."
+        },
+        {
+          "mark": "play",
+          "description": "A play badge, for a tile that starts something."
+        },
+        {
+          "mark": "lock",
+          "description": "A padlock, for a tile the viewer cannot open yet."
         }
       ],
       "glyphs": [
@@ -473,9 +580,19 @@
         "film",
         "tv",
         "music",
-        "globe"
+        "globe",
+        "book",
+        "game",
+        "podcast",
+        "heart",
+        "clock",
+        "calendar",
+        "person",
+        "folder",
+        "link",
+        "play"
       ],
-      "glyphNote": "Deliberately generic. We draw these ourselves in each platform's own idiom, so do not expect a ceremony's or a service's own logo: a real logo is a trademark, and a plugin cannot licence one on our behalf. A monogram beside a generic glyph is how you say which body an award came from.",
+      "glyphNote": "Deliberately generic. We draw these ourselves in each platform's own idiom, so do not expect a ceremony's or a service's own logo: a real logo is a trademark, and a plugin cannot licence one on our behalf. A monogram beside a generic glyph is how you say which body an award came from. A monogram and a glyph are drawn on the `circle` shape only. Every other shape falls back to that card's own empty state, which is the title set large on a tinted panel, so on a wide, poster or square tile set `tint` and expect the title rather than letters.",
       "tints": [
         "gold",
         "silver",
@@ -487,7 +604,121 @@
         "gray"
       ],
       "tintNote": "Named rather than free-form, because the viewer picks the theme and you cannot know it. A tint you do not set draws the neutral disc.",
-      "maxMonogramRunes": 5
+      "maxMonogramRunes": 5,
+      "maxBadgeRunes": 24,
+      "maxTextRunes": 300,
+      "hero": {
+        "description": "One card across the width with dots paging through the rest. It is the only layout that draws a tile's `text` and its `links`, and the only one that rotates on its own.",
+        "maxTiles": 10,
+        "maxLinks": 2,
+        "rotateMinSeconds": 4,
+        "rotateMaxSeconds": 60
+      }
+    },
+    "noticeTones": [
+      {
+        "tone": "info",
+        "description": "The neutral statement, and what an unknown tone reads as."
+      },
+      {
+        "tone": "success",
+        "description": "Something worked, or is connected."
+      },
+      {
+        "tone": "warning",
+        "description": "Something needs attention. Not an error dialog: a notice is a line, and the person is still in charge of when to act on it."
+      }
+    ],
+    "columnSplits": [
+      {
+        "split": "equal",
+        "description": "Equal widths. Always used for three columns, because 2:1:1 is the beginning of a layout language and this is not one."
+      },
+      {
+        "split": "wideLeft",
+        "description": "2:1, for a main column with a sidebar after it."
+      },
+      {
+        "split": "wideRight",
+        "description": "1:2, the same thing the other way round."
+      }
+    ],
+    "vocabulary": {
+      "version": 2,
+      "header": "X-Block-Vocab",
+      "description": "Which display vocabulary a client draws. Every leaf block degrades on its own (an app that does not know a type shows your fallbackText), so leaf types never move this number. `columns` cannot: what it holds is blocks, so an app that skipped it would lose everything inside. Clients send this header on every call and the server flattens a columns block into its blocks, in column order, for anyone below the current version. An absent header reads as 1, which is the safe reading of silence."
+    }
+  },
+  "channelLayout": {
+    "description": "The channel page document (D177). It is NOT part of the block vocabulary and sits beside it for that reason: a plugin never sends one of these rows, it DESCRIBES a row and the server draws it out of the library. Two people write this document, you as the `layout` in your manifest and the household through the layout editor, and both go through the same validation, so a document naming a kind, a sort, a shape or a library key outside these sets is refused with the field named.",
+    "merge": "Ids are the merge key. The stored document holds only the household's edits: an order, a hidden list, per-block overrides and rows they added. A page is resolved from your current default with those applied, so an update that adds a row shows it at the bottom, one that removes a row takes it away with any edits on it, and nothing a person arranged moves.",
+    "kinds": [
+      {
+        "kind": "hero",
+        "description": "The big card at the top, fed from one of your libraries. Takes `library`, `sort`, `limit` (1 to 10) and `rotateSeconds` (0 for off, else 4 to 60). It is drawn as a tiles hero, so it looks like every other hero in the app."
+      },
+      {
+        "kind": "libraryShelf",
+        "description": "A scrolling row from one of your libraries. Takes `library`, `sort`, `shape`, `limit` (4 to 24) and `title`. It is drawn as the app's ordinary shelf, with a see-all that opens the library."
+      },
+      {
+        "kind": "collectionShelf",
+        "description": "A row from a collection in this household. Takes `collection` (its id) and `title`. Owner-added only: you cannot know a household's collection ids, and it is the one row a person adds that is theirs rather than yours."
+      },
+      {
+        "kind": "heading",
+        "description": "A line of text between rows. Takes `text`."
+      },
+      {
+        "kind": "slot",
+        "description": "Your own row: whatever channel.render returns for this id. Takes `title` and `cacheSeconds`. It is the only kind an owner cannot add, since the host has nothing to fill it with, and the only one they may hide but not edit."
+      }
+    ],
+    "sorts": [
+      {
+        "sort": "recent",
+        "description": "Newest first, by when it arrived. What a hero means by new."
+      },
+      {
+        "sort": "title",
+        "description": "A to Z."
+      },
+      {
+        "sort": "rating",
+        "description": "Best rated first."
+      },
+      {
+        "sort": "release",
+        "description": "Newest released first."
+      },
+      {
+        "sort": "unwatched",
+        "description": "Newest first, with anything the viewer has finished left out. It is the one name here that is a filter as well as an ordering, and it is applied for the person looking, like everything else on the page."
+      }
+    ],
+    "shapes": [
+      {
+        "shape": "wide",
+        "description": "The 16:9 card."
+      },
+      {
+        "shape": "poster",
+        "description": "The 2:3 card."
+      }
+    ],
+    "shapeNote": "Two shapes, not the tile vocabulary's four: a channel row holds titles, and a title is a card or a poster. A circle or a square would be a row drawing something the library itself never draws.",
+    "bounds": {
+      "maxLibraries": 6,
+      "maxBlocks": 16,
+      "heroMinLimit": 1,
+      "heroMaxLimit": 10,
+      "shelfMinLimit": 4,
+      "shelfMaxLimit": 24,
+      "rotateMinSeconds": 4,
+      "rotateMaxSeconds": 60,
+      "cacheSecondsDefault": 900,
+      "cacheSecondsMax": 86400,
+      "note": "A limit of 0 means the row's default (20 for a shelf, 5 for a hero) and is never an error. Anything else outside its range is refused rather than clamped, so a number you typed is the number that draws. The block ceiling applies AFTER the household's edits are merged, so an owner adding rows is bounded by the same 16 you are."
     }
   },
   "manifest": {
@@ -567,6 +798,11 @@
         "key": "themes",
         "required": false,
         "description": "What a theme pack ships: up to 12 looks, each `{ id, name, accent, focus, bg, gradient: [from, to], panel, text, dim, cardRadius, bgImage }`. Colours are `#rrggbb` and the gradient is exactly two of them. `bgImage` names a .jpg or .png inside your own package, so it is hash-verified like everything else. Every field is checked at install: signing says who wrote a pack, never that its colours are colours."
+      },
+      {
+          "key": "channel",
+          "required": false,
+          "description": "A channel (D177): several libraries behind one card, with a page of your own. `{ \"name\": \"Star Wars\", \"label\": \"Every film and series, in order\", \"art\": \"channel.jpg\", \"account\": \"none\", \"libraries\": [...], \"layout\": [...] }`. `libraries` is up to 6 entries, each an ordinary source declaration plus a `key` (lowercase letters, digits and dashes, unique here) and a `name`; the key rides on every sync and resolve so you know which one you are being asked about. `account` is the channel's, not each library's, and `profile` requires the events family exactly as a source's does. `art` is a .jpg or .png inside your package. `layout` is the default page, up to 16 blocks, in the channelLayout vocabulary. Requires the channel family AND the source family, since the libraries sync and play through the source ops. A manifest carries `source` or `channel`, never both: a channel's libraries are its sources."
       },
       {
         "key": "source",

@@ -1,0 +1,26 @@
+{
+  "id": "theater.multipass.showcase",
+  "name": "Showcase",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "minHostVersion": "0.65.0",
+  "entry": "plugin.wasm",
+  "description": "Every block shape and widget a plugin can draw, on one page, with the source next to it. Install it, open any film or series, and follow the link: you get a rotating hero, big figures, bars, a two-column split, and the same tiles drawn as posters, wide cards, squares and circles. It asks for no permissions at all. minHostVersion is 0.65.0 because an older server silently drops a block type it does not know: keep that number equal to the release that carries the D177 vocabulary, and raise it in the same commit as any newer shape.",
+  "author": "Multipass",
+  "provides": [
+    "fields",
+    "pages"
+  ],
+  "pages": [
+    {
+      "id": "gallery",
+      "title": "Every shape",
+      "subject": "item",
+      "cacheSeconds": 3600
+    }
+  ],
+  "limits": {
+    "memoryPages": 64,
+    "timeoutMs": 5000
+  }
+}

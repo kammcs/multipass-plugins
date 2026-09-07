@@ -81,7 +81,8 @@
           "segments",
           "theme",
           "pages",
-          "source"
+          "source",
+        "channel"
         ]
       }
     },
@@ -344,6 +345,225 @@
             "type": "string",
             "description": "A .jpg or .png inside your own package, shown behind the app on TV and native. Hash-verified like every packaged file.",
             "pattern": "^[A-Za-z0-9._-]+\\.(jpg|png)$"
+          }
+        }
+      }
+    },
+    "channel": {
+      "type": "object",
+      "description": "A channel (D177): several libraries behind one card, with a page of your own. Requires the channel family AND the source family, since its libraries sync and play through the source ops, and a manifest declares source or channel, never both.",
+      "required": [
+        "name",
+        "libraries",
+        "layout"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The channel, as a person reads it on the card and at the top of its page.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "label": {
+          "type": "string",
+          "description": "The line under the name.",
+          "maxLength": 120
+        },
+        "art": {
+          "type": "string",
+          "description": "The card's picture: a plain .jpg or .png file name inside your own package, so it is hash-verified like everything else you ship. A 16:9 picture is the shape to draw.",
+          "pattern": "^[^/\\\\]+\\.(jpg|png)$"
+        },
+        "account": {
+          "type": "string",
+          "description": "Whether this channel belongs to a person. It is the channel's answer for all of its libraries: a per-profile channel is created whole when somebody presses Connect and removed whole when they Disconnect, and its card is on the shelf only for them. profile requires the events family, which is what Connect runs.",
+          "enum": [
+            "none",
+            "profile"
+          ]
+        },
+        "libraries": {
+          "type": "array",
+          "description": "The libraries this channel owns. Each is an ordinary source declaration plus a key and a name; the key rides on every sync and resolve so you know which library you are being asked about, and a library entry cannot declare an account of its own.",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "name",
+              "shape"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": "string",
+                "description": "Lowercase letters, digits and dashes, unique within the plugin. Keep it stable across versions: changing it is a new library.",
+                "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+                "maxLength": 40
+              },
+              "name": {
+                "type": "string",
+                "description": "What this library is called.",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "shape": {
+                "type": "string",
+                "description": "The library's type.",
+                "enum": [
+                  "movie",
+                  "show"
+                ]
+              },
+              "refreshMinutes": {
+                "type": "integer",
+                "description": "How often the host re-syncs this library. Absent or zero means 360. Anything under 15 is refused rather than clamped.",
+                "minimum": 15
+              },
+              "settings": {
+                "type": "array",
+                "description": "The fields the owner fills in when the library is added. A per-profile channel's libraries cannot declare them: nothing would ever fill them in.",
+                "maxItems": 32,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "key",
+                    "label",
+                    "type"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "password",
+                        "number",
+                        "toggle",
+                        "select"
+                      ]
+                    },
+                    "default": {
+                      "type": "string"
+                    },
+                    "options": {
+                      "type": "array",
+                      "description": "Required when type is select.",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "help": {
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "layout": {
+          "type": "array",
+          "description": "The page you ship. The household then owns it: the stored document holds their edits and this stays the default underneath. Ids are the merge key, so keep them stable.",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "kind"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Lowercase letters, digits and dashes. It is the merge key between your default and the household's edits.",
+                "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+                "maxLength": 40
+              },
+              "kind": {
+                "type": "string",
+                "description": "What this row is. Everything but slot is drawn by the host out of what it already has; slot is yours, and is the one kind an owner can hide but never add.",
+                "enum": [
+                  "hero",
+                  "libraryShelf",
+                  "collectionShelf",
+                  "heading",
+                  "slot"
+                ]
+              },
+              "library": {
+                "type": "string",
+                "description": "Which of this channel's libraries feeds the row. Required for hero and libraryShelf, and a key this channel does not own is refused.",
+                "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+                "maxLength": 40
+              },
+              "collection": {
+                "type": "integer",
+                "description": "A collection in this household, for a collectionShelf. Owner-added only: you cannot know a household's collection ids.",
+                "minimum": 1
+              },
+              "sort": {
+                "type": "string",
+                "description": "The row's ordering. These are the library view's own sorts, so a row of yours costs no more than one of ours. unwatched is newest first with anything the viewer has finished left out.",
+                "enum": [
+                  "recent",
+                  "title",
+                  "rating",
+                  "release",
+                  "unwatched"
+                ]
+              },
+              "shape": {
+                "type": "string",
+                "description": "Which card a shelf draws. A channel row holds titles, so it is one of these two rather than the tile vocabulary's four.",
+                "enum": [
+                  "wide",
+                  "poster"
+                ]
+              },
+              "limit": {
+                "type": "integer",
+                "description": "How many titles the row holds. Absent or zero means the default: 20 for a shelf, 5 for a hero. A hero holds 1 to 10, a shelf 4 to 24.",
+                "minimum": 0,
+                "maximum": 24
+              },
+              "title": {
+                "type": "string",
+                "description": "The row's heading.",
+                "maxLength": 120
+              },
+              "text": {
+                "type": "string",
+                "description": "A heading block's line.",
+                "maxLength": 120
+              },
+              "rotateSeconds": {
+                "type": "integer",
+                "description": "How fast a hero pages through its titles. 0 is off.",
+                "minimum": 0,
+                "maximum": 60
+              },
+              "cacheSeconds": {
+                "type": "integer",
+                "description": "How long a slot's render may be reused. Absent or zero means 900. The cards inside it are resolved fresh for every viewer regardless.",
+                "minimum": 0,
+                "maximum": 86400
+              }
+            }
           }
         }
       }

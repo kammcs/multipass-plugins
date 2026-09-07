@@ -1,0 +1,99 @@
+{
+  "id": "theater.multipass.channeldemo",
+  "name": "Channel demo",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "minHostVersion": "0.65.0",
+  "description": "A whole channel with nothing behind it: two libraries (Films and Series) whose catalog is a table this plugin carries, a card on the Channels shelf, and a page whose default layout ships with the plugin and belongs to the household afterwards. It reaches nothing on the internet and needs nothing configured, so a harness and a curious owner get the same working channel. Its resolver has no media and says so in a sentence rather than handing back an address that would stall. minHostVersion is 0.65.0 because an older server does not know the channel family at all: keep that number equal to the release that carries channels, read from the published manifest at release time and never from a snapshot in the docs.",
+  "author": "Multipass",
+  "entry": "plugin.wasm",
+  "provides": [
+    "source",
+    "channel"
+  ],
+  "channel": {
+    "name": "Channel demo",
+    "label": "Two libraries, one page, no network",
+    "art": "channel.jpg",
+    "account": "none",
+    "libraries": [
+      {
+        "key": "films",
+        "name": "Films",
+        "shape": "movie",
+        "refreshMinutes": 360,
+        "settings": [
+          {
+            "key": "era",
+            "label": "Which films to list",
+            "type": "select",
+            "options": [
+              "all",
+              "classics",
+              "new"
+            ],
+            "default": "all",
+            "help": "Narrows what a sync of this library enumerates. It is here to prove that a setting belongs to the LIBRARY, not to the plugin: the Series library beside it has its own field and never sees this one."
+          }
+        ]
+      },
+      {
+        "key": "series",
+        "name": "Series",
+        "shape": "show",
+        "refreshMinutes": 360,
+        "settings": [
+          {
+            "key": "includeSpecials",
+            "label": "Include specials",
+            "type": "toggle",
+            "default": "false",
+            "help": "Lists the season 0 episodes as well. Season 0 is a real season here, the way a folder scan treats one."
+          }
+        ]
+      }
+    ],
+    "layout": [
+      {
+        "id": "hero",
+        "kind": "hero",
+        "library": "films",
+        "sort": "recent",
+        "limit": 4,
+        "rotateSeconds": 8
+      },
+      {
+        "id": "new",
+        "kind": "libraryShelf",
+        "library": "films",
+        "sort": "recent",
+        "shape": "wide",
+        "limit": 12,
+        "title": "New films"
+      },
+      {
+        "id": "picks",
+        "kind": "slot",
+        "title": "What this channel is",
+        "cacheSeconds": 3600
+      },
+      {
+        "id": "shows-heading",
+        "kind": "heading",
+        "text": "Series"
+      },
+      {
+        "id": "shows",
+        "kind": "libraryShelf",
+        "library": "series",
+        "sort": "title",
+        "shape": "poster",
+        "limit": 12
+      }
+    ]
+  },
+  "limits": {
+    "memoryPages": 64,
+    "timeoutMs": 5000
+  }
+}
