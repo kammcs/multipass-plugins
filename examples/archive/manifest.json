@@ -1,0 +1,37 @@
+{
+  "id": "theater.multipass.archive",
+  "name": "Internet Archive",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "minHostVersion": "0.64.0",
+  "description": "Turns a collection at archive.org into a library of films your household can watch. Point it at a collection (Prelinger's ephemeral films, feature films, public-domain shorts) and its titles arrive as ordinary movies: they browse, sort, resume, go in playlists and sit under the same rating limit as everything else on the server. Your server fetches every stream itself, so nothing on a TV or a phone ever talks to archive.org.",
+  "author": "Multipass",
+  "entry": "plugin.wasm",
+  "capabilities": {
+    "http": [
+      "archive.org"
+    ],
+    "library": true
+  },
+  "provides": [
+    "source"
+  ],
+  "source": {
+    "shape": "movie",
+    "account": "none",
+    "refreshMinutes": 1440,
+    "settings": [
+      {
+        "key": "collection",
+        "label": "Collection",
+        "type": "text",
+        "default": "prelinger",
+        "help": "The archive.org collection to pull from, as it appears in the address of the collection's page: archive.org/details/prelinger is prelinger. Only films with a playable copy are listed, most-downloaded first."
+      }
+    ]
+  },
+  "limits": {
+    "memoryPages": 256,
+    "timeoutMs": 20000
+  }
+}

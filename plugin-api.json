@@ -4,6 +4,7 @@
   "stability": "Frozen-additive within an apiVersion. New families, ops, block types and manifest fields may appear; existing ones will not change meaning or disappear. A breaking change would ship as apiVersion 2, and a server refuses a package whose apiVersion it does not speak, so an old plugin never half-works.",
   "abi": {
     "target": "WebAssembly. Any language that compiles to wasm works; Go's own `GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared` needs no toolchain beyond Go.",
+    "clock": "You have a real clock: monotonic time for measuring, and wall time for dates and expiries. Everything else about the world outside your module arrives as an op's input or through a host function.",
     "exports": [
       {
         "name": "mp_alloc(size i32) -> i32",
@@ -225,7 +226,8 @@
         "Nothing about playback waits on you. A slow or unreachable service is logged and moves on, so do not design around being retried.",
         "Ordinary position updates are not events. You are told about edges (started, paused, resumed, stopped, finished), because a consumer that wanted a progress firehose could not use one anyway.",
         "A stop and a finish are different. A stop is wherever they left it; a finish means the server counted it as watched, which is the one you can trust for a completed history entry.",
-        "A session that goes quiet is closed for you after a few minutes, so a client that was killed or lost power still produces a stop rather than an open scrobble forever."
+        "A session that goes quiet is closed for you after a few minutes, so a client that was killed or lost power still produces a stop rather than an open scrobble forever.",
+        "Declaring this family with no events at all is refused, because it would put a line on the install screen that nothing acts on. The one exception is a source whose libraries belong to a person: it declares this family for the connect flow, which is what creates their library, and may want no events."
       ],
       "events": [
         {
@@ -313,7 +315,7 @@
       ],
       "conventions": [
         "Declare `subject: \"person\"` or `subject: \"item\"` on a page and the host resolves its `id` param before calling you: a person arrives with their credits in this library, an item with its cast and crew. This is why a page about what somebody directed needs no permissions at all.",
-        "For anything the host cannot know, ask narrowly: the `library` grant maps external ids from your own service onto local refs. Put those refs in an itemShelf or itemGrid and the server draws the cards.",
+        "For anything the host cannot know, ask narrowly: the `library` grant maps external ids from a metadata service (or, if you are a source, from your own namespace) onto local refs. Put those refs in an itemShelf or itemGrid and the server draws the cards.",
         "Your page's blocks are CACHED for `cacheSeconds` (default 900, at most a day), but the cards inside a container block are resolved for every viewer on every render. Never assume the person who sees a page is the one whose request built it.",
         "A subject that names something the viewer may not see arrives as absent, not as an error. Handle a missing subject by rendering what you can, or nothing.",
         "Link between your own pages with the `page` action. You cannot link into another plugin's pages, and a link to a page you did not declare is dropped."
@@ -321,9 +323,36 @@
     },
     {
       "id": "source",
-      "title": "Library types",
-      "status": "planned",
-      "description": "Be a source of items that are not files on disk: a scanner that produces virtual items and a resolver that turns one into a playable URL at play time."
+      "title": "Plugin libraries",
+      "status": "available",
+      "description": "Be a library whose items are not files on disk. You supply a catalog and the server turns it into ordinary movies and episodes: they browse, search, sort, resume, count as watched, go in playlists, and sit under the household rating cap, because they are the same rows every screen already draws. Planned and ruled in D176.",
+      "notes": "You never see a local id. You name things with YOUR ids, and the host keeps the mapping, which is what makes a re-sync land on the row it made last time instead of a second copy: progress, watched state and playlists all survive. A library declares its shape, movie or show, and a show-shaped library is a channel per series with its uploads as episodes. What you say about the media itself (a duration, a container) is a HINT and is stored as one: the server probes the stream at first play, and what it measures is what it acts on.",
+      "ops": [
+        {
+          "op": "source.sync",
+          "input": "{ library: { shape, config }, cursor, since }",
+          "output": "{ series: [...], items: [...], next, complete }",
+          "description": "One page of your catalog. `config` is what the owner filled in when they added the library. Return `next` to be called again for the rest, and `complete: true` on the last page of a FULL enumeration. An item is `{ externalId, title, year, releaseDate, overview, genres, runtimeMin, poster, backdrop, still, series, season, episode, certs, meta, durationS }`; a series is the same minus the episode fields. `externalId` is yours and must be stable, because it is the identity of the row.",
+          "notes": "`complete: true` is the ONLY thing that authorizes removing what you did not list, and a page that also carries `next` is not complete whatever it claims. That is deliberate: a sync that failed halfway has seen part of a catalog, and a service being briefly unreachable must never empty somebody's library. At most 200 series and 200 items per page, 20,000 items per library. A row with no `externalId` or no `title` is dropped rather than repaired."
+        },
+        {
+          "op": "source.resolve",
+          "input": "{ library: { shape, config }, item: { externalId, series, season, episode, title } }",
+          "output": "{ url, headers, expiresAt, hint }",
+          "description": "The stream behind one of your items, asked when somebody presses Play. `url` is fetched by the SERVER, which probes it and serves the viewer the same HLS session it serves for a file on disk: no URL, header or token of yours ever reaches a device. `headers` ride that fetch; `expiresAt` is unix seconds and says how long the URL is good for; `hint` is advisory.",
+          "notes": "This is the second op that runs while a person is waiting, and it has a 10 second budget. A failure becomes an honest message on screen, never a spinner. Two rules on what you may return, and both are what the owner agreed to at install: the host must be one your manifest asked permission for, and the address must be https (a loopback address is the one exception, because there is no network in between). The resolution is cached until it expires, so a resume costs you nothing; say when it expires or it is reused for 15 minutes."
+        }
+      ],
+      "conventions": [
+        "Name a match with `meta: { provider, id }` and the title arrives with posters and cast, because the host refetches by that id. Leave it out and nothing is ever looked up: searching a metadata service for the title of a channel upload finds something, and something is worse than nothing.",
+        "Declare `certs` (a country to certification map) if your service knows one. It is ranked exactly as a certification from anywhere else, so the household's rating cap gates your items in SQL. No certs means unrated, and each profile's allow-unrated rule decides.",
+        "A library that needs somebody's account declares `account: \"profile\"`. It is created when that person presses Connect and removed when they Disconnect, it is private to them (the owner sees it too, as they see every private library), and its syncs run as them, so what you read from the link is theirs.",
+        "A source library has no files, so everything keyed to a file is correctly absent: no downloads, no trick-play, no skip markers, no editions, no Optimize. Nothing is refusing you; there is simply no file to work on.",
+        "Pictures you name are fetched by the server and re-served from here, the same door every plugin image goes through, so a viewer's device never connects to a host you chose.",
+        "Your address may redirect, and that is expected: return the address your service publishes rather than hunting for the file server behind it. The server settles the chain itself before it fetches, so ffmpeg is handed the address that actually serves the bytes. The GRANT binds only the address YOU returned. Where the granted host sends the server next is that host's business and is not held to your manifest, so you never have to name a CDN nobody could have judged at install; every hop is still held to https and to a destination outside the household network, and a hop that fails either is refused, with Play saying so rather than fetching it anyway.",
+        "A duration or container you declare is a HINT and is stored as one. The server probes the stream at first play and acts on what it measured, because you cannot know what this server will have to do to something it has not seen. Playback is never direct: a remote stream is remuxed at minimum, so a device only ever talks to this server.",
+        "Your own plugin id is a lookup namespace. With the `library` grant, asking `lookup` for your own id maps the external ids you filed things under onto local items, which is how a search result knows whether to open an item somebody already has or one of your pages. Two limits, and both are about whose library it is: you are answered only in your OWN namespace, and a call with nobody behind it (a search, whose one answer is cached for the whole house) is answered only about libraries everybody can see. So a library that belongs to one person never turns up in an answer everybody gets, and a row pointing at something the viewer cannot open is dropped before they see it."
+      ]
     }
   ],
   "blocks": {
@@ -540,6 +569,11 @@
         "description": "What a theme pack ships: up to 12 looks, each `{ id, name, accent, focus, bg, gradient: [from, to], panel, text, dim, cardRadius, bgImage }`. Colours are `#rrggbb` and the gradient is exactly two of them. `bgImage` names a .jpg or .png inside your own package, so it is hash-verified like everything else. Every field is checked at install: signing says who wrote a pack, never that its colours are colours."
       },
       {
+        "key": "source",
+        "required": false,
+        "description": "What kind of library you are, e.g. `{ \"shape\": \"show\", \"account\": \"profile\", \"refreshMinutes\": 360, \"settings\": [...] }`. `shape` is `movie` or `show` and becomes the library's type. `account` is `none` (the owner adds it like a folder and the household shares it) or `profile` (it is created by pressing Connect and belongs to that person, which requires the events family). `refreshMinutes` defaults to 360 and cannot be under 15. `settings` are the LIBRARY's fields, filled in once when it is added, so two libraries from one plugin have their own; they use the same vocabulary as your plugin settings and cannot be per-profile. A source with `account: \"profile\"` cannot declare them at all: its libraries are created by pressing Connect, so there is no form anybody would ever fill in. Use your own plugin settings for those. Requires the source family, and a source plugin must declare one."
+      },
+      {
         "key": "actions",
         "required": false,
         "description": "Buttons the host draws beside your settings, e.g. `[{ \"id\": \"test\", \"label\": \"Test connection\" }]`. Pressing one calls `settings.action` with that id and shows the sentence you return. `scope` works exactly as it does for a setting: `server` puts the button in the owner's card, `profile` puts it on each person's own preferences. At most 8."
@@ -605,13 +639,28 @@
       "actionsPerMinute": 10,
       "maxProfileValueRunes": 512,
       "note": "The press limit counts every profile together, because the thing it protects is whatever your button calls out to. A press past it is refused before your plugin is asked."
+    },
+    "source": {
+      "maxPageRows": 200,
+      "maxItemsPerLibrary": 20000,
+      "minRefreshMinutes": 15,
+      "defaultRefreshMinutes": 360,
+      "maxExternalIdRunes": 200,
+      "note": "A page is a round trip on your side and a batch of writes on ours, so it is bounded well under the library ceiling: a bigger catalog says so with `next`.",
+      "resolveBudgetSeconds": 10,
+      "defaultResolveMinutes": 15,
+      "maxResolveHours": 12,
+      "maxResolveHeaders": 8,
+      "maxHeaderValueRunes": 512,
+      "maxStreamRedirects": 5,
+      "settleBudgetSeconds": 8
     }
   },
   "package": {
     "extension": ".mpp",
     "format": "A zip holding manifest.json, manifest.sig, and every file the manifest names.",
     "verification": "Verification happens entirely in memory. A package that fails leaves nothing on disk.",
-    "signing": "Registry packages are signed with the Multipass registry key, which lives on one machine and never on the server or the node. Signing happens on acceptance, so you do not need a key to submit."
+    "signing": "Registry packages are signed for you, on approval, by the developer portal's publish key. You never need a key to submit, and you never hold one: the key that signs what the catalog serves is not yours and is not on your server."
   },
   "registry": {
     "description": "The catalog servers browse and install from. Free to list, free to host.",
@@ -639,7 +688,8 @@
       "mature",
       "adult"
     ],
-    "beta": "Testing builds reach real servers through a per-account beta catalog: a linked server asks the cloud, with its own server credential, for the beta builds its account may see, meaning the account is the plugin's developer, an invited tester (each plugin can invite up to 10, by email that must match a Multipass account), or a reviewer looking at submitted builds. The beta catalog and its packages are signed with the same keys as everything published, so install, consent screen and kill switch are identical to production; the entries simply appear in the owner's hub marked Beta. A testing build drops out 90 days after upload. An unlinked server, or one whose account was invited to nothing, sees no trace of any of this."
+    "beta": "Testing builds reach real servers through a per-account beta catalog: a linked server asks the cloud, with its own server credential, for the beta builds its account may see, meaning the account is the plugin's developer, an invited tester (each plugin can invite up to 10, by email that must match a Multipass account), or a reviewer looking at submitted builds. The beta catalog and its packages are signed with the same keys as everything published, so install, consent screen and kill switch are identical to production; the entries simply appear in the owner's hub marked Beta. A testing build drops out 90 days after upload. An unlinked server, or one whose account was invited to nothing, sees no trace of any of this.",
+    "submission": "Submitting is the developer portal at developer.multipass.theater, signed in with your ordinary Multipass account. You create a listing, upload the package and the source it was built from, invite up to 10 testers if you want a build tried on real servers first, and submit when you are ready. Review is a person reading it: a first submission gets a full pass, and an update is read as a diff against the last approved version, so an update that changes no grants is a light review. On approval the portal signs and publishes, either straight away or when you choose to release."
   },
   "policy": {
     "title": "What the registry will and will not list",

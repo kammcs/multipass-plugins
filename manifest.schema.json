@@ -348,6 +348,88 @@
         }
       }
     },
+    "source": {
+      "type": "object",
+      "description": "What kind of library you are (D176). Requires the source family, and a source plugin must declare one.",
+      "required": [
+        "shape"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "shape": {
+          "type": "string",
+          "description": "The library's type. A show-shaped library is a channel per series with its uploads as episodes.",
+          "enum": [
+            "movie",
+            "show"
+          ]
+        },
+        "account": {
+          "type": "string",
+          "description": "Whether a library of this kind belongs to a person. none: the owner adds it like a folder and the household shares it. profile: it is created when somebody presses Connect and removed when they Disconnect, it is private to them, and its syncs run as them. profile requires the events family, which is what Connect runs.",
+          "enum": [
+            "none",
+            "profile"
+          ]
+        },
+        "refreshMinutes": {
+          "type": "integer",
+          "description": "How often the host re-syncs. Absent or zero means 360. Anything under 15 is refused rather than clamped.",
+          "minimum": 15
+        },
+        "settings": {
+          "type": "array",
+          "description": "The fields the owner fills in when adding a library of this kind (a feed URL, a region). They belong to the LIBRARY, so two libraries from one plugin have their own, and none of them can be per-profile.",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "label",
+              "type"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "type": {
+                "type": "string",
+                "description": "A password setting is write-only to the API: an owner can replace it, never read it back out of the server they are configuring.",
+                "enum": [
+                  "text",
+                  "password",
+                  "number",
+                  "toggle",
+                  "select"
+                ]
+              },
+              "default": {
+                "type": "string"
+              },
+              "options": {
+                "type": "array",
+                "description": "Required when type is select.",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "help": {
+                "type": "string",
+                "maxLength": 500
+              }
+            }
+          }
+        }
+      }
+    },
     "limits": {
       "type": "object",
       "description": "Your declared budgets. Zero or absent means the default, never unlimited: there is no way to express unlimited.",

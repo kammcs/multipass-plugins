@@ -1,0 +1,80 @@
+{
+  "id": "theater.multipass.feeddemo",
+  "name": "Feed demo",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "minHostVersion": "0.64.0",
+  "description": "A reference plugin library: one channel and five uploads, produced as ordinary episodes so they browse, sort, resume and sit under the household rating cap like anything else, a resolver that hands the server a stream when somebody presses Play, and a search hook that sends a result straight to the item it already made. Its catalog is a table it carries, and it is pointed at its own media, so it needs nothing on the internet. Used by the test harness.",
+  "author": "Multipass",
+  "entry": "plugin.wasm",
+  "capabilities": {
+    "http": [
+      "127.0.0.1"
+    ],
+    "library": true
+  },
+  "provides": [
+    "source",
+    "search"
+  ],
+  "source": {
+    "shape": "show",
+    "account": "none",
+    "refreshMinutes": 360,
+    "settings": [
+      {
+        "key": "channel",
+        "label": "Channel name",
+        "type": "text",
+        "default": "The Demo Channel",
+        "help": "What to call the show this library holds. It belongs to the library, so a second library from this plugin can name a different one."
+      },
+      {
+        "key": "mediaBase",
+        "label": "Where the files are",
+        "type": "text",
+        "default": "",
+        "help": "The address the uploads are served from, ending in a slash. A real plugin gets this from its service; this one is told, so a test can point it at its own fixture."
+      }
+    ]
+  },
+  "settings": [
+    {
+      "key": "catalog",
+      "label": "How the sync should end",
+      "type": "select",
+      "options": [
+        "full",
+        "trimmed",
+        "incomplete",
+        "error"
+      ],
+      "default": "full",
+      "help": "Drives the four endings a sync can have, so the harness can prove what each one does to a library. No real plugin has anything like this."
+    },
+    {
+      "key": "resolve",
+      "label": "How Play should answer",
+      "type": "select",
+      "options": [
+        "ok",
+        "auth",
+        "error",
+        "badhost"
+      ],
+      "default": "ok",
+      "help": "ok returns the stream. auth returns it with a token the server must put on its fetch. error is what a service being down looks like. badhost returns an address this plugin never asked permission for, which the server refuses before fetching anything."
+    },
+    {
+      "key": "ttlSeconds",
+      "label": "How long a stream address is good for",
+      "type": "number",
+      "default": "900",
+      "help": "Set it low to watch the server ask again rather than reuse what it cached."
+    }
+  ],
+  "limits": {
+    "memoryPages": 64,
+    "timeoutMs": 10000
+  }
+}

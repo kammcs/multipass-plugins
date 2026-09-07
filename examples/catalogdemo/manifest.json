@@ -1,0 +1,54 @@
+{
+  "id": "theater.multipass.catalogdemo",
+  "name": "Catalog demo",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "minHostVersion": "0.64.0",
+  "description": "A reference for the kind of plugin library that belongs to a person: connecting an account is what creates it, and disconnecting removes it. It also searches its own service and draws a page for a title you do not have yet, so the four families that make up a searchable, streamable catalog are all here in one package. Used by the test harness.",
+  "author": "Multipass",
+  "entry": "plugin.wasm",
+  "capabilities": {
+    "http": [
+      "127.0.0.1"
+    ],
+    "library": true
+  },
+  "provides": [
+    "source",
+    "events",
+    "search",
+    "pages"
+  ],
+  "source": {
+    "shape": "movie",
+    "account": "profile",
+    "refreshMinutes": 360
+  },
+  "pages": [
+    {
+      "id": "title",
+      "title": "On the demo service",
+      "cacheSeconds": 3600
+    }
+  ],
+  "settings": [
+    {
+      "key": "mediaBase",
+      "label": "Where the files are",
+      "type": "text",
+      "default": "",
+      "help": "The address the titles are served from, ending in a slash. A real plugin gets this from its service; this one is told, so a test can point it at its own fixture."
+    },
+    {
+      "key": "pollsToConnect",
+      "label": "Polls before connecting succeeds",
+      "type": "number",
+      "default": "1",
+      "help": "How many times Connect has to ask before the account links. Set it above one to watch the waiting state. No real plugin has anything like this."
+    }
+  ],
+  "limits": {
+    "memoryPages": 64,
+    "timeoutMs": 10000
+  }
+}
