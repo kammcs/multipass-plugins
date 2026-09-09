@@ -1,0 +1,290 @@
+{
+  "id": "theater.multipass.archivechannel",
+  "name": "The Internet Archive",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "minHostVersion": "0.66.0",
+  "description": "A whole channel of public-domain film and television from archive.org, arranged rather than dumped: eight libraries (features, noir, science fiction and horror, comedy, silent film, animation, newsreels, and classic TV as real series with real episodes) behind one card, with a page that arrives laid out and belongs to your household afterwards. The titles on the front are a curated list this plugin carries, matched to TMDB by id, so they arrive with proper posters, backdrops and cast rather than the archive's own thumbnails. Your server fetches every stream itself, so nothing on a TV or a phone ever talks to archive.org.",
+  "author": "Multipass",
+  "entry": "plugin.wasm",
+  "capabilities": {
+    "http": [
+      "archive.org"
+    ],
+    "library": true
+  },
+  "provides": [
+    "source",
+    "channel"
+  ],
+  "channel": {
+    "name": "The Internet Archive",
+    "label": "Public domain film and television",
+    "art": "channel.jpg",
+    "account": "none",
+    "libraries": [
+      {
+        "key": "films",
+        "name": "Feature Films",
+        "shape": "movie",
+        "refreshMinutes": 1440,
+        "settings": [
+          {
+            "key": "depth",
+            "label": "How much of the archive to list",
+            "type": "select",
+            "options": [
+              "curated",
+              "reviewed",
+              "everything"
+            ],
+            "default": "curated",
+            "help": "Curated is this plugin's own list: titles somebody chose, matched to their real posters and cast. Reviewed adds the rest of the collection, filtered to what the archive's own viewers rated well. Everything adds the whole collection, most-downloaded first. The archive publishes no content rating and no adult flag, so past Curated nobody has looked at what arrives: the wider settings include exploitation films, and uploads that are plainly still in copyright."
+          }
+        ]
+      },
+      {
+        "key": "noir",
+        "name": "Film Noir",
+        "shape": "movie",
+        "refreshMinutes": 1440,
+        "settings": [
+          {
+            "key": "depth",
+            "label": "How much of the archive to list",
+            "type": "select",
+            "options": [
+              "curated",
+              "reviewed",
+              "everything"
+            ],
+            "default": "curated",
+            "help": "Curated is this plugin's own list: titles somebody chose, matched to their real posters and cast. Reviewed adds the rest of the collection, filtered to what the archive's own viewers rated well. Everything adds the whole collection, most-downloaded first. Past Curated nobody has looked at what arrives: the archive publishes no content rating of any kind."
+          }
+        ]
+      },
+      {
+        "key": "scifi",
+        "name": "Science Fiction and Horror",
+        "shape": "movie",
+        "refreshMinutes": 1440,
+        "settings": [
+          {
+            "key": "depth",
+            "label": "How much of the archive to list",
+            "type": "select",
+            "options": [
+              "curated",
+              "reviewed",
+              "everything"
+            ],
+            "default": "curated",
+            "help": "Curated is this plugin's own list: titles somebody chose, matched to their real posters and cast. Reviewed adds the rest of the collection, filtered to what the archive's own viewers rated well. Everything adds the whole collection, most-downloaded first. Past Curated nobody has looked at what arrives: the archive publishes no content rating of any kind."
+          }
+        ]
+      },
+      {
+        "key": "comedy",
+        "name": "Comedy",
+        "shape": "movie",
+        "refreshMinutes": 1440,
+        "settings": [
+          {
+            "key": "depth",
+            "label": "How much of the archive to list",
+            "type": "select",
+            "options": [
+              "curated",
+              "reviewed",
+              "everything"
+            ],
+            "default": "curated",
+            "help": "Curated is this plugin's own list: titles somebody chose, matched to their real posters and cast. Reviewed adds the rest of the collection, filtered to what the archive's own viewers rated well. Everything adds the whole collection, most-downloaded first. Past Curated nobody has looked at what arrives: the archive publishes no content rating of any kind."
+          }
+        ]
+      },
+      {
+        "key": "silent",
+        "name": "The Silent Era",
+        "shape": "movie",
+        "refreshMinutes": 1440,
+        "settings": [
+          {
+            "key": "depth",
+            "label": "How much of the archive to list",
+            "type": "select",
+            "options": [
+              "curated",
+              "reviewed",
+              "everything"
+            ],
+            "default": "curated",
+            "help": "Curated is this plugin's own list: titles somebody chose, matched to their real posters and cast. Reviewed adds the rest of the collection, filtered to what the archive's own viewers rated well. Everything adds the whole collection, most-downloaded first. Past Curated nobody has looked at what arrives: the archive publishes no content rating of any kind."
+          }
+        ]
+      },
+      {
+        "key": "cartoons",
+        "name": "Animation",
+        "shape": "movie",
+        "refreshMinutes": 1440,
+        "settings": [
+          {
+            "key": "depth",
+            "label": "How much of the archive to list",
+            "type": "select",
+            "options": [
+              "curated",
+              "reviewed",
+              "everything"
+            ],
+            "default": "curated",
+            "help": "Curated is this plugin's own list: titles somebody chose, matched to their real posters and cast. Reviewed adds the rest of the collection, filtered to what the archive's own viewers rated well. Everything adds the whole collection, most-downloaded first. Past Curated nobody has looked at what arrives: the archive publishes no content rating of any kind."
+          }
+        ]
+      },
+      {
+        "key": "newsreel",
+        "name": "Newsreels and Ephemera",
+        "shape": "movie",
+        "refreshMinutes": 1440,
+        "settings": [
+          {
+            "key": "depth",
+            "label": "How much of the archive to list",
+            "type": "select",
+            "options": [
+              "curated",
+              "reviewed",
+              "everything"
+            ],
+            "default": "curated",
+            "help": "Curated is this plugin's own list: titles somebody chose, matched to their real posters and cast. Reviewed adds the rest of the collection, filtered to what the archive's own viewers rated well. Everything adds the whole collection, most-downloaded first. Past Curated nobody has looked at what arrives: the archive publishes no content rating of any kind."
+          }
+        ]
+      },
+      {
+        "key": "tv",
+        "name": "Classic Television",
+        "shape": "show",
+        "refreshMinutes": 1440,
+        "settings": [
+          {
+            "key": "depth",
+            "label": "How much of the archive to list",
+            "type": "select",
+            "options": [
+              "curated",
+              "reviewed",
+              "everything"
+            ],
+            "default": "curated",
+            "help": "Curated is this plugin's own list: titles somebody chose, matched to their real posters and cast. Reviewed adds the rest of the collection, filtered to what the archive's own viewers rated well. Everything adds the whole collection, most-downloaded first. Past Curated this library also gets much slower to refresh, because it reads a file list for every title it lists."
+          }
+        ]
+      }
+    ],
+    "layout": [
+      {
+        "id": "hero",
+        "kind": "hero",
+        "library": "films",
+        "sort": "rating",
+        "limit": 5,
+        "rotateSeconds": 8
+      },
+      {
+        "id": "picks",
+        "kind": "slot",
+        "title": "Start here",
+        "cacheSeconds": 3600
+      },
+      {
+        "id": "noir",
+        "kind": "libraryShelf",
+        "library": "noir",
+        "sort": "rating",
+        "shape": "poster",
+        "limit": 20,
+        "title": "Film noir"
+      },
+      {
+        "id": "scifi",
+        "kind": "libraryShelf",
+        "library": "scifi",
+        "sort": "rating",
+        "shape": "poster",
+        "limit": 20,
+        "title": "Science fiction and horror"
+      },
+      {
+        "id": "comedy",
+        "kind": "libraryShelf",
+        "library": "comedy",
+        "sort": "rating",
+        "shape": "poster",
+        "limit": 20,
+        "title": "Comedy"
+      },
+      {
+        "id": "vault",
+        "kind": "heading",
+        "text": "From the vaults"
+      },
+      {
+        "id": "newsreel",
+        "kind": "libraryShelf",
+        "library": "newsreel",
+        "sort": "recent",
+        "shape": "wide",
+        "limit": 20,
+        "title": "Newsreels and ephemera"
+      },
+      {
+        "id": "tv",
+        "kind": "libraryShelf",
+        "library": "tv",
+        "sort": "title",
+        "shape": "wide",
+        "limit": 20,
+        "title": "Classic television"
+      },
+      {
+        "id": "silent",
+        "kind": "libraryShelf",
+        "library": "silent",
+        "sort": "rating",
+        "shape": "poster",
+        "limit": 20,
+        "title": "The silent era"
+      },
+      {
+        "id": "cartoons",
+        "kind": "libraryShelf",
+        "library": "cartoons",
+        "sort": "rating",
+        "shape": "wide",
+        "limit": 20,
+        "title": "Animation"
+      },
+      {
+        "id": "unseen",
+        "kind": "libraryShelf",
+        "library": "films",
+        "sort": "unwatched",
+        "shape": "wide",
+        "limit": 20,
+        "title": "Not seen yet"
+      },
+      {
+        "id": "about",
+        "kind": "slot",
+        "cacheSeconds": 3600
+      }
+    ]
+  },
+  "limits": {
+    "memoryPages": 256,
+    "timeoutMs": 30000
+  }
+}

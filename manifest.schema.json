@@ -387,7 +387,7 @@
           "type": "array",
           "description": "The libraries this channel owns. Each is an ordinary source declaration plus a key and a name; the key rides on every sync and resolve so you know which library you are being asked about, and a library entry cannot declare an account of its own.",
           "minItems": 1,
-          "maxItems": 6,
+          "maxItems": 10,
           "items": {
             "type": "object",
             "required": [

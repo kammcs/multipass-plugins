@@ -333,7 +333,7 @@
           "input": "{ library: { shape, config, key }, cursor, since }",
           "output": "{ series: [...], items: [...], next, complete }",
           "description": "One page of your catalog. `config` is what the owner filled in when they added the library. Return `next` to be called again for the rest, and `complete: true` on the last page of a FULL enumeration. An item is `{ externalId, title, year, releaseDate, overview, genres, runtimeMin, poster, backdrop, still, series, season, episode, certs, meta, durationS }`; a series is the same minus the episode fields. `externalId` is yours and must be stable, because it is the identity of the row. `library.key` says WHICH of your libraries this is, and it is present only for a channel (D177): a plugin with a single `source` block is never sent one and needs no change.",
-          "notes": "`complete: true` is the ONLY thing that authorizes removing what you did not list, and a page that also carries `next` is not complete whatever it claims. That is deliberate: a sync that failed halfway has seen part of a catalog, and a service being briefly unreachable must never empty somebody's library. At most 200 series and 200 items per page, 20,000 items per library. A row with no `externalId` or no `title` is dropped rather than repaired."
+          "notes": "`complete: true` is the ONLY thing that authorizes removing what you did not list, and a page that also carries `next` is not complete whatever it claims. That is deliberate: a sync that failed halfway has seen part of a catalog, and a service being briefly unreachable must never empty somebody's library. At most 200 series and 200 items per page, and no limit on how many a library ends up holding. A row with no `externalId` or no `title` is dropped rather than repaired."
         },
         {
           "op": "source.resolve",
@@ -708,7 +708,7 @@
     ],
     "shapeNote": "Two shapes, not the tile vocabulary's four: a channel row holds titles, and a title is a card or a poster. A circle or a square would be a row drawing something the library itself never draws.",
     "bounds": {
-      "maxLibraries": 6,
+      "maxLibraries": 10,
       "maxBlocks": 16,
       "heroMinLimit": 1,
       "heroMaxLimit": 10,
@@ -878,11 +878,10 @@
     },
     "source": {
       "maxPageRows": 200,
-      "maxItemsPerLibrary": 20000,
       "minRefreshMinutes": 15,
       "defaultRefreshMinutes": 360,
       "maxExternalIdRunes": 200,
-      "note": "A page is a round trip on your side and a batch of writes on ours, so it is bounded well under the library ceiling: a bigger catalog says so with `next`.",
+      "note": "A page is a round trip on your side and a batch of writes on ours, so it is bounded: a bigger catalog says so with `next`. A LIBRARY is not bounded by item count, and there is no ceiling to design around. What bounds one sync is wall clock (an hour for the whole pass) and the rule that your cursor has to advance: hand back the cursor you were given and the sync stops and says so, rather than re-reading one page until the clock runs out.",
       "resolveBudgetSeconds": 10,
       "defaultResolveMinutes": 15,
       "maxResolveHours": 12,
