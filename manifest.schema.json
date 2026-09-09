@@ -650,6 +650,10 @@
         }
       }
     },
+    "setup": {
+      "type": "boolean",
+      "description": "Ask the host to call plugin.setup once after your plugin is installed, upgraded or switched back on, so it can seed its storage or migrate what an older version wrote. Not a family: any plugin may declare it, and a plugin that declares it must ship an entry, because setup is code the host runs. Absent means false."
+    },
     "limits": {
       "type": "object",
       "description": "Your declared budgets. Zero or absent means the default, never unlimited: there is no way to express unlimited.",

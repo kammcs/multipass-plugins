@@ -127,15 +127,29 @@ func syncShows(req syncRequest, l libDef) response {
 	if catalogDepth(req.Library.Config) == curatedOnly {
 		return curatedShows(l, c)
 	}
+	// The row goes up before the search request, and it is the only report
+	// this page makes that is not about a title: everything after this is
+	// one metadata call per row, which is where the half hour goes.
+	w := walk{label: "Listing " + l.name, offset: (c.page - 1) * showRows}
+	w.at(0, "reading page "+strconv.Itoa(c.page))
 	var res searchResult
 	if err := get(searchURLRows(l, req.Library.Config, c.page, showRows), &res); err != nil {
 		// An honest failure changes nothing in the library, which is why a
 		// sync that fails is different from a sync that returns less.
+		reportDone()
 		return response{Error: "could not read " + l.name + ": " + err.Error()}
 	}
 	docs := res.Response.Docs
 	if len(docs) == 0 && c.page == 1 {
+		reportDone()
 		return response{Error: "that collection has no series with a playable copy"}
+	}
+	// What this pass will actually walk, which is not what the index holds:
+	// it stops at maxShowPages, so measuring against numFound would leave a
+	// finished pass reporting eight per cent.
+	w.total = res.Response.NumFound
+	if ceiling := maxShowPages * showRows; w.total > ceiling {
+		w.total = ceiling
 	}
 	vouched := map[string]pick{}
 	for _, v := range picksFor(l.key) {
@@ -151,23 +165,25 @@ func syncShows(req syncRequest, l libDef) response {
 		src = append(src, s)
 	}
 
-	out, next, exhausted, blind := fillPage(src, c)
+	out, next, exhausted, blind := fillPage(src, c, w)
 	blind = blind || c.blind
-	if !exhausted {
+	switch {
+	case !exhausted:
 		next.blind = blind
 		out.Next = next.String()
-		return response{Data: out}
-	}
 	// This search page is spent. Only an enumeration that really reached
 	// the end of the result set may authorise the host to delete what it
 	// did not see, and only if every item on the way was actually read.
-	done := len(docs) < showRows || res.Response.Start+len(docs) >= res.Response.NumFound
-	if done {
+	case len(docs) < showRows || res.Response.Start+len(docs) >= res.Response.NumFound:
 		out.Complete = !blind
-		return response{Data: out}
-	}
-	if c.page < maxShowPages {
+	case c.page < maxShowPages:
 		out.Next = showCursor{page: c.page + 1, blind: blind}.String()
+	}
+	if out.Next == "" {
+		// Nothing follows, so the row goes now. A pass that finished and
+		// left one behind would sit on the activity list for ninety
+		// seconds describing work nobody is doing.
+		reportDone()
 	}
 	return response{Data: out}
 }
@@ -197,13 +213,15 @@ func curatedShows(l libDef, c showCursor) response {
 		}
 		src = append(src, showSource{doc: d, p: &ps[i]})
 	}
-	out, next, exhausted, blind := fillPage(src, c)
+	w := walk{label: "Listing " + l.name, total: len(src)}
+	out, next, exhausted, blind := fillPage(src, c, w)
 	blind = blind || c.blind
 	if !exhausted {
 		next.blind = blind
 		out.Next = next.String()
 		return response{Data: out}
 	}
+	reportDone()
 	if len(out.Series) == 0 && c.doc == 0 {
 		return response{Error: l.name + " has no curated shows this server could read, so there is nothing to list at this setting"}
 	}
@@ -222,12 +240,17 @@ func curatedShows(l libDef, c showCursor) response {
 // That is deliberate and it is free: the host upserts a series by its
 // external id, so the second copy lands on the row the first one made, and
 // an episode arriving on page three still finds its show.
-func fillPage(src []showSource, start showCursor) (out syncPage, next showCursor, exhausted, blind bool) {
+func fillPage(src []showSource, start showCursor, w walk) (out syncPage, next showCursor, exhausted, blind bool) {
 	ep := start.ep
 	for i := start.doc; i < len(src); i++ {
 		if len(out.Items) >= maxPageItems {
 			return out, showCursor{page: start.page, doc: i, ep: ep}, false, blind
 		}
+		// One report per title, before the round trip that title costs.
+		// This is the loop the whole progress feature exists for: at
+		// `reviewed` depth it runs five hundred times and the only other
+		// sign of life is an item count creeping up.
+		w.at(i, "reading "+strings.Join(strings.Fields(strip(src[i].doc.Title.s)), " "))
 		s, eps, err := expandSeries(src[i].doc, src[i].p)
 		if err != nil {
 			// Never seen, rather than known to hold nothing, which is the

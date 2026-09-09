@@ -56,10 +56,15 @@ func syncMovies(req syncRequest, l libDef) response {
 	// all of it, so the host may prune, which is the one depth where a
 	// title dropped from the table actually leaves the library.
 	if catalogDepth(req.Library.Config) == curatedOnly {
+		// Reported even though it finishes in milliseconds. An owner
+		// watching the activity list sees one row per plugin, and the
+		// library that said nothing at all is the one that looks stuck.
+		report(progressReport{Label: "Listing " + l.name, Detail: "the curated list"})
 		items := []srcItem{}
 		for _, p := range picksFor(l.key) {
 			items = append(items, curatedItem(p))
 		}
+		reportDone()
 		if len(items) == 0 {
 			return response{Error: l.name + " has no curated titles yet, so there is nothing to list at this setting"}
 		}
@@ -73,15 +78,22 @@ func syncMovies(req syncRequest, l libDef) response {
 		}
 		page = n
 	}
+	// The row goes up BEFORE the request, because the request is where the
+	// time goes: a report written after it would only ever describe work
+	// that had already finished.
+	w := walk{label: "Listing " + l.name}
+	w.at(0, "reading page "+strconv.Itoa(page))
 	var res searchResult
 	if err := get(searchURL(l, req.Library.Config, page), &res); err != nil {
 		// An honest failure. The host records it, shows it in the hub, and
 		// changes nothing in the library, which is the whole reason a sync
 		// that fails is different from a sync that returns less.
+		reportDone()
 		return response{Error: "could not read " + l.name + ": " + err.Error()}
 	}
 	docs := res.Response.Docs
 	if len(docs) == 0 && page == 1 {
+		reportDone()
 		// This plugin wrote the query, so an empty first page means the
 		// archive renamed or emptied a collection. Reporting it is not just
 		// tidier than filing the curated rows alone: an empty page is a
@@ -113,6 +125,16 @@ func syncMovies(req syncRequest, l libDef) response {
 	out := syncPage{Items: items, Complete: done}
 	if !done && page < maxPages {
 		out.Next = strconv.Itoa(page + 1)
+	}
+	if out.Next == "" {
+		// Nothing follows this page, whether because the pass listed
+		// everything or because it reached this plugin's own ceiling, so
+		// the row goes now rather than ageing out ninety seconds later
+		// over a library that has finished.
+		reportDone()
+	} else {
+		w.total = res.Response.NumFound
+		w.at(seen, strconv.Itoa(seen)+" of "+strconv.Itoa(res.Response.NumFound)+" titles")
 	}
 	return response{Data: out}
 }

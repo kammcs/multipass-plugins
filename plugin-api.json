@@ -52,6 +52,11 @@
       "name": "lookup(ptr, len) -> i64",
       "capability": "library",
       "description": "Map external ids from one provider onto local refs ({itemId} or {seriesId}). Anything absent from the answer is simply not in this library. At most 100 ids per call."
+    },
+    {
+      "name": "progress(ptr, len)",
+      "capability": null,
+      "description": "Say what you are doing while you are doing it: `{ label, pct, detail, done }` becomes one line in the owner's server activity view. Ungated for the same reason `log` is, and void for the same reason too: a report is not a question, so there is no answer to read. One row per plugin, so a later call replaces an earlier one; `label` and `detail` are clipped and single-lined, `pct` is clamped to 0 through 1, a row nobody refreshes goes stale and disappears, and `done: true` clears it at once. Reach for it in slow work, a first sync or a migration inside setup, so a plugin that is busy does not look hung."
     }
   ],
   "grantsAreImports": "A capability is not a permission check, it is whether the function exists. Ungranted host functions are never added to your module, so calling one fails at load with a link error rather than at runtime with a refusal. There is no permission-check path for the host to forget.",
@@ -800,9 +805,9 @@
         "description": "What a theme pack ships: up to 12 looks, each `{ id, name, accent, focus, bg, gradient: [from, to], panel, text, dim, cardRadius, bgImage }`. Colours are `#rrggbb` and the gradient is exactly two of them. `bgImage` names a .jpg or .png inside your own package, so it is hash-verified like everything else. Every field is checked at install: signing says who wrote a pack, never that its colours are colours."
       },
       {
-          "key": "channel",
-          "required": false,
-          "description": "A channel (D177): several libraries behind one card, with a page of your own. `{ \"name\": \"Star Wars\", \"label\": \"Every film and series, in order\", \"art\": \"channel.jpg\", \"account\": \"none\", \"libraries\": [...], \"layout\": [...] }`. `libraries` is up to 6 entries, each an ordinary source declaration plus a `key` (lowercase letters, digits and dashes, unique here) and a `name`; the key rides on every sync and resolve so you know which one you are being asked about. `account` is the channel's, not each library's, and `profile` requires the events family exactly as a source's does. `art` is a .jpg or .png inside your package. `layout` is the default page, up to 16 blocks, in the channelLayout vocabulary. Requires the channel family AND the source family, since the libraries sync and play through the source ops. A manifest carries `source` or `channel`, never both: a channel's libraries are its sources."
+        "key": "channel",
+        "required": false,
+        "description": "A channel (D177): several libraries behind one card, with a page of your own. `{ \"name\": \"Star Wars\", \"label\": \"Every film and series, in order\", \"art\": \"channel.jpg\", \"account\": \"none\", \"libraries\": [...], \"layout\": [...] }`. `libraries` is up to 6 entries, each an ordinary source declaration plus a `key` (lowercase letters, digits and dashes, unique here) and a `name`; the key rides on every sync and resolve so you know which one you are being asked about. `account` is the channel's, not each library's, and `profile` requires the events family exactly as a source's does. `art` is a .jpg or .png inside your package. `layout` is the default page, up to 16 blocks, in the channelLayout vocabulary. Requires the channel family AND the source family, since the libraries sync and play through the source ops. A manifest carries `source` or `channel`, never both: a channel's libraries are its sources."
       },
       {
         "key": "source",
@@ -813,6 +818,11 @@
         "key": "actions",
         "required": false,
         "description": "Buttons the host draws beside your settings, e.g. `[{ \"id\": \"test\", \"label\": \"Test connection\" }]`. Pressing one calls `settings.action` with that id and shows the sentence you return. `scope` works exactly as it does for a setting: `server` puts the button in the owner's card, `profile` puts it on each person's own preferences. At most 8."
+      },
+      {
+        "key": "setup",
+        "required": false,
+        "description": "`true` asks the host to call `plugin.setup` once after this plugin is installed, upgraded or switched back on. It is not a family: a family is something a plugin IS, and setup is a moment in its life, so any plugin may declare it. Absent means false, and a plugin that does not declare it is never called. Declaring it means shipping an `entry`, because setup is code the host runs. The lifecycle section says what runs, in what order, and what a failure leaves behind."
       },
       {
         "key": "limits",
@@ -876,6 +886,16 @@
       "maxProfileValueRunes": 512,
       "note": "The press limit counts every profile together, because the thing it protects is whatever your button calls out to. A press past it is refused before your plugin is asked."
     },
+    "setup": {
+      "maxMessageRunes": 200,
+      "note": "Setup runs once, under your own `timeoutMs`, and the sentence it answers with is shown to the owner beside your plugin, so it is clipped to a sentence. Setup is not the place to sync a catalog: that is what `source.sync` and its schedule are for."
+    },
+    "progress": {
+      "maxLabelRunes": 80,
+      "maxDetailRunes": 120,
+      "staleSeconds": 90,
+      "note": "One row per plugin at a time, so however often you call, you hold one line and never a screen. Label and detail are clipped and single-lined, `pct` is clamped to 0 through 1, and a row that is not refreshed inside staleSeconds disappears on its own. Say `done: true` when you finish, rather than leaving the owner to wait the row out."
+    },
     "source": {
       "maxPageRows": 200,
       "minRefreshMinutes": 15,
@@ -903,7 +923,7 @@
     "consent": "An owner is shown exactly what a plugin may do BEFORE anything is downloaded. A package whose manifest asks for more than the catalog advertised is refused, because that approval was not for this plugin. Asking for less is always fine.",
     "updates": "A new version that wants a NEW power is flagged as a new decision rather than treated as consent to update.",
     "withdrawal": "A signed kill switch can withdraw a plugin. Servers honor it on a daily check and whenever an owner opens their plugins page. A withdrawn plugin is switched off with its reason shown, cannot be re-enabled, and cannot be reinstalled. It is never deleted: the owner needs to see what happened, and a plugin's data outliving a bad release is worth more than a tidy directory.",
-    "richListing": "A published catalog entry can carry listing fields beyond the v1 set, all written by the store from your listing rather than by your manifest: category (one key from the list below), ageTier (your self-declared tier, review-verified), developer (your public developer name), releaseNotes (the current version's notes), purposes (your one-line reason per grant, keyed http, storage and library, shown on the store's privacy card beside the grant sentences), images (each with a kind of icon, banner or shot, an id that is the sha256 of the bytes, and a registry-relative path), installs and trending (distinct linked servers all-time and over the past 30 days), and events (the events your manifest declares, so the pre-install screen can say what the plugin can be told). Every field is optional and additive. Servers fetch and verify each image against its pinned sha256 and proxy it to their own clients, so a tampered image can never render and a viewer never contacts the registry.",
+    "richListing": "A published catalog entry can carry listing fields beyond the v1 set, all written by the store from your listing rather than by your manifest: category (one key from the list below), ageTier (your self-declared tier, review-verified), developer (your public developer name), releaseNotes (the current version's notes), purposes (your one-line reason per grant, keyed http, storage and library, shown on the store's privacy card beside the grant sentences), images (each with a kind of icon, banner or shot, an id that is the sha256 of the bytes, and a registry-relative path), installs and trending (distinct linked servers all-time and over the past 30 days), events (the events your manifest declares, so the pre-install screen can say what the plugin can be told), and libraries (the libraries a household channel will create when it is installed, so the install screen names them before anybody presses the button rather than after). Every field is optional and additive. Servers fetch and verify each image against its pinned sha256 and proxy it to their own clients, so a tampered image can never render and a viewer never contacts the registry.",
     "categories": [
       "metadata-artwork",
       "ratings-awards",
@@ -952,6 +972,44 @@
         "why": "A TV has no browser engine to run it in, and a per-client plugin UI contract is the thing that killed the last generation of media-server plugins. Plugins ship data; the apps render it."
       }
     ]
+  },
+  "lifecycle": {
+    "description": "What happens the moment a plugin is installed, upgraded or switched back on. Setting up is two steps, and the first one runs no code of yours at all: the host creates what your manifest already declares, then calls `plugin.setup` if you asked to be called. Neither step blocks the install, because a first sync of several libraries takes minutes.",
+    "declarative": "A channel with `account: \"none\"` already names its libraries in the signed manifest, so installing it CREATES the ones the server does not have, with your names and each library's defaults, and starts their first sync. This needs no manifest field and no code: the declaration is the instruction. It is create-if-missing and never a reconcile, so a library that is already there keeps every setting the owner changed, and an upgrade or a re-enable never undoes their work.",
+    "declarativeExceptions": [
+      {
+        "what": "A channel with `account: \"profile\"`",
+        "why": "Its libraries belong to one person and are created when that person presses Connect (D176). An install knows nothing about whose they would be, so nothing is created and the flow is unchanged."
+      },
+      {
+        "what": "A plain `source` library",
+        "why": "It is not a channel. Its settings have no fixed answer, a feed URL is not something a manifest can guess, and one plugin can back several libraries at once. The owner still adds it under Libraries and fills the form in."
+      }
+    ],
+    "op": {
+      "op": "plugin.setup",
+      "input": "{ reason, previousVersion?, locale }",
+      "output": "{ ok, message }",
+      "description": "Your own half of setting up, called once when the manifest says `setup: true`. It runs with the capabilities you already declared and nothing more: setup grants no new powers. `message` is one sentence the owner is shown beside your plugin, and it may be a string key from your catalog. Answering nothing at all is a success: a handler that did its work and had nothing to say is the simplest correct one there is.",
+      "notes": "Make it idempotent. It fires again on every upgrade and on a re-enable somebody may have done for an unrelated reason, so it has to be safe to run twice. Use it to seed your storage, warm a cache, or migrate what an older version of yourself wrote, and use `progress` if any of that is slow. Do not sync a catalog here: that is `source.sync`."
+    },
+    "reasons": [
+      {
+        "reason": "install",
+        "description": "A fresh install of your plugin. `previousVersion` is absent."
+      },
+      {
+        "reason": "upgrade",
+        "description": "A newer version replaced an older one, and `previousVersion` names the version it replaced. That field is the whole reason the upgrade case exists: a plugin changing its own storage format has no other moment to migrate it."
+      },
+      {
+        "reason": "enable",
+        "description": "Somebody switched your plugin back on. Usually there is nothing to do, which is why everything setup does is written to be safe to repeat."
+      }
+    ],
+    "unimplemented": "A plugin that declares `setup` and does not answer the op replies `unsupported op`, and the host treats that as nothing to do plus a line in the log. Forgetting to write the handler is never a broken install.",
+    "failure": "An error, or `ok: false`, is a failed setup. The plugin stays INSTALLED, is shown as not set up with what went wrong, and the owner can run setup again. Nothing is rolled back and nothing is auto-disabled: throwing away a working install over a transient blip would be the worse answer, and so would hiding the problem behind a second thing to notice.",
+    "progress": "While setup, a sync, or any other slow call is running, the `progress` host function puts one line per plugin into the owner's server activity view. It is how a plugin that is busy for a minute says so instead of looking hung."
   },
   "settings": {
     "description": "Settings are the one way a person types anything at a plugin. Blocks are output and settings are input, which is why this contract grows and the block vocabulary does not.",

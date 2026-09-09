@@ -491,6 +491,13 @@ func mpHandle(ptr, n int32) int64 {
 		return respond(resolve(req.Data))
 	case "channel.render":
 		return respond(render(req.Data))
+	case "plugin.setup":
+		// D179. The manifest declares `setup: true`, which is what makes
+		// the host call this after an install, an upgrade or a re-enable.
+		// Declaring it and not answering here would be `unsupported op`,
+		// which the host treats as nothing to do rather than as a broken
+		// install, so the failure mode of forgetting this line is quiet.
+		return respond(pluginSetup(req.Data))
 	}
 	return respond(response{Error: "unsupported op " + req.Op})
 }

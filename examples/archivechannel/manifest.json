@@ -3,7 +3,7 @@
   "name": "The Internet Archive",
   "version": "1.0.0",
   "apiVersion": 1,
-  "minHostVersion": "0.66.0",
+  "minHostVersion": "0.67.0",
   "description": "A whole channel of public-domain film and television from archive.org, arranged rather than dumped: eight libraries (features, noir, science fiction and horror, comedy, silent film, animation, newsreels, and classic TV as real series with real episodes) behind one card, with a page that arrives laid out and belongs to your household afterwards. The titles on the front are a curated list this plugin carries, matched to TMDB by id, so they arrive with proper posters, backdrops and cast rather than the archive's own thumbnails. Your server fetches every stream itself, so nothing on a TV or a phone ever talks to archive.org.",
   "author": "Multipass",
   "entry": "plugin.wasm",
@@ -17,6 +17,7 @@
     "source",
     "channel"
   ],
+  "setup": true,
   "channel": {
     "name": "The Internet Archive",
     "label": "Public domain film and television",
