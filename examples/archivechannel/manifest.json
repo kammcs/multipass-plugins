@@ -1,9 +1,9 @@
 {
   "id": "theater.multipass.archivechannel",
   "name": "The Internet Archive",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiVersion": 1,
-  "minHostVersion": "0.67.0",
+  "minHostVersion": "0.68.0",
   "description": "A whole channel of public-domain film and television from archive.org, arranged rather than dumped: eight libraries (features, noir, science fiction and horror, comedy, silent film, animation, newsreels, and classic TV as real series with real episodes) behind one card, with a page that arrives laid out and belongs to your household afterwards. The titles on the front are a curated list this plugin carries, matched to TMDB by id, so they arrive with proper posters, backdrops and cast rather than the archive's own thumbnails. Your server fetches every stream itself, so nothing on a TV or a phone ever talks to archive.org.",
   "author": "Multipass",
   "entry": "plugin.wasm",
@@ -22,6 +22,19 @@
     "name": "The Internet Archive",
     "label": "Public domain film and television",
     "art": "channel.jpg",
+    "theme": {
+      "accent": "#c9a227",
+      "focus": "#c9a227",
+      "bg": "#161310",
+      "gradient": [
+        "#161310",
+        "#0d0b09"
+      ],
+      "panel": "#1f1a15",
+      "text": "#efe7d8",
+      "dim": "#a2957f",
+      "cardRadius": 6
+    },
     "account": "none",
     "libraries": [
       {

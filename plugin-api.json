@@ -379,7 +379,8 @@
         "`account` belongs to the channel, not to each library. A channel with `account: \"profile\"` is created whole when somebody presses Connect and removed whole when they Disconnect, and its card is on the shelf only for them; a library entry declaring an account of its own is refused.",
         "`art` names a .jpg or .png inside your own package, so it is hash-verified like every other file you ship and is served from this server. It is the card, so a 16:9 picture is the shape to draw.",
         "Layout ids are the merge key between your default and the household's edits. Keep them stable across versions, or an update loses whatever was arranged on that row and nobody will have touched it.",
-        "Ask for the sorts and shapes in the channelLayout vocabulary and nothing else. They are the library view's own orderings, so a row of yours costs the server no more than one of ours."
+        "Ask for the sorts and shapes in the channelLayout vocabulary and nothing else. They are the library view's own orderings, so a row of yours costs the server no more than one of ours.",
+        "Declare `theme` on your channel and the whole channel looks like itself: your colours paint your page, the detail page of any title from one of your libraries however somebody reached it (search, Keep Watching, a playlist), and the player while one of them is playing. It follows your CONTENT rather than the person's navigation, which is what makes a channel feel like an app somebody stepped into. Cards in mixed rows are deliberately never themed. The field is the same shape a theme pack declares, minus `id` and `name`, so there is no second colour vocabulary to learn. Leave it out and nothing anywhere changes colour."
       ]
     }
   ],
@@ -807,7 +808,7 @@
       {
         "key": "channel",
         "required": false,
-        "description": "A channel (D177): several libraries behind one card, with a page of your own. `{ \"name\": \"Star Wars\", \"label\": \"Every film and series, in order\", \"art\": \"channel.jpg\", \"account\": \"none\", \"libraries\": [...], \"layout\": [...] }`. `libraries` is up to 6 entries, each an ordinary source declaration plus a `key` (lowercase letters, digits and dashes, unique here) and a `name`; the key rides on every sync and resolve so you know which one you are being asked about. `account` is the channel's, not each library's, and `profile` requires the events family exactly as a source's does. `art` is a .jpg or .png inside your package. `layout` is the default page, up to 16 blocks, in the channelLayout vocabulary. Requires the channel family AND the source family, since the libraries sync and play through the source ops. A manifest carries `source` or `channel`, never both: a channel's libraries are its sources."
+        "description": "A channel (D177): several libraries behind one card, with a page of your own. `{ \"name\": \"Star Wars\", \"label\": \"Every film and series, in order\", \"art\": \"channel.jpg\", \"account\": \"none\", \"libraries\": [...], \"layout\": [...] }`. `libraries` is up to 10 entries, each an ordinary source declaration plus a `key` (lowercase letters, digits and dashes, unique here) and a `name`; the key rides on every sync and resolve so you know which one you are being asked about. `account` is the channel's, not each library's, and `profile` requires the events family exactly as a source's does. `art` is a .jpg or .png inside your package. `layout` is the default page, up to 16 blocks, in the channelLayout vocabulary. Requires the channel family AND the source family, since the libraries sync and play through the source ops. A manifest carries `source` or `channel`, never both: a channel's libraries are its sources. `theme` is optional and is what your channel LOOKS like (D180): `{ accent, focus, bg, gradient: [from, to], panel, text, dim, cardRadius, bgImage }`, the same tokens a theme pack declares, so every client draws it with no new code and there is no second colour vocabulary to learn. It applies wherever your content goes, not just on your page, and unlike `layout` it is not something the household rearranges. A theme nobody could read is refused at install: see limits.channelTheme."
       },
       {
         "key": "source",
@@ -909,6 +910,11 @@
       "maxHeaderValueRunes": 512,
       "maxStreamRedirects": 5,
       "settleBudgetSeconds": 8
+    },
+    "channelTheme": {
+      "textMinContrast": 4.5,
+      "labelMinContrast": 4.5,
+      "note": "A channel theme that cannot be READ is refused at install, naming the pairing that failed: body text against each surface it sits on (the background, the panel, each gradient stop) must reach 4.5, and your accent and focus fills must each leave black or white legible on them at 4.5. This is stricter than the warning an owner gets when drawing their own theme, and deliberately so: they chose their colours and can change them, while nobody chose yours. Lower-stakes pairings, like an accent that barely stands out from your background, are yours to judge and are not refused."
     }
   },
   "package": {
